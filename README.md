@@ -1,1 +1,1 @@
-Soft body simulation app for seminar at FER.
+Fluid simulation app for project at FER.
