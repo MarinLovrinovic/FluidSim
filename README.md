@@ -1,1 +1,1 @@
-Cloth simulation app for undergraduate final project at FER.
+Soft body simulation app for seminar at FER.
