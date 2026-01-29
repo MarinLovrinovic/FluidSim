@@ -18,7 +18,7 @@ Renderer::Renderer(int width, int height) : width(width), height(height){
 
     glfwWindowHint(GLFW_DOUBLEBUFFER, GLFW_TRUE);
 
-    window = glfwCreateWindow(width, height, "Zadatak X", nullptr, nullptr);
+    window = glfwCreateWindow(width, height, "ClothSim", nullptr, nullptr);
     // provjeri je li se uspio napraviti prozor
     if (window == nullptr) {
         fprintf(stderr, "Failed to Create OpenGL Context");

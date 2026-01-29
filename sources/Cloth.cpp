@@ -1,9 +1,19 @@
 #include "Cloth.h"
 #include "TriangleMesh.h"
 #include <glm/glm.hpp>
-#include <set>
 #include <utility>
 #include <cmath>
+#include <glm/gtc/noise.hpp>
+
+glm::vec3 CalculateTurbulentFlow(const glm::vec3& position, float time, float scale, float amplitude) {
+    glm::vec3 scaledPos = position * scale;
+    float noiseX = glm::perlin(glm::vec4(scaledPos, time));
+    float noiseY = glm::perlin(glm::vec4(scaledPos + glm::vec3(100.0f), time));
+    float noiseZ = glm::perlin(glm::vec4(scaledPos + glm::vec3(200.0f), time));
+
+    glm::vec3 turbulence(noiseX, noiseY, noiseZ);
+    return amplitude * turbulence;
+}
 
 template<class T>
 void TwoDimToOneDim(const vector<vector<T>>& twoDim, vector<T>& oneDim) {
@@ -17,8 +27,8 @@ void TwoDimToOneDim(const vector<vector<T>>& twoDim, vector<T>& oneDim) {
 
 void CalculateNormals(const vector<vector<glm::vec3>>& currentPositions, vector<vector<glm::vec3>>& normals) {
     int dim = currentPositions.size();
-    for (int i = 0; i < dim - 1; ++i) {
-        for (int j = 0; j < dim - 1; ++j) {
+    for (int i = 0; i < dim; ++i) {
+        for (int j = 0; j < dim; ++j) {
             normals[i][j] = glm::vec3(0);
         }
     }
@@ -42,8 +52,8 @@ void CalculateNormals(const vector<vector<glm::vec3>>& currentPositions, vector<
         }
     }
 
-    for (int i = 0; i < dim - 1; ++i) {
-        for (int j = 0; j < dim - 1; ++j) {
+    for (int i = 0; i < dim; ++i) {
+        for (int j = 0; j < dim; ++j) {
             normals[i][j] = glm::normalize(normals[i][j]);
         }
     }
@@ -75,7 +85,7 @@ vector<glm::vec3> CalculateUVs(int dim) {
     return uvs;
 }
 
-Cloth::Cloth(int dimension, float springConstant, float springDampingCoefficient, float dragCoefficient, Shader* shader,
+Cloth::Cloth(int dimension, float springConstant, float springDampingCoefficient, float dragCoeffiscient, Shader* shader,
              glm::vec3 position, float sideLength, bool vertical, vector<glm::ivec2> fixed) :
 dim(dimension),
 springConstant(springConstant),
@@ -158,6 +168,8 @@ dragCoefficient(dragCoefficient) {
 }
 
 void Cloth::Update(float dt, glm::vec3 gravity, glm::vec3 airflow, const vector<Collider*>& colliders) {
+    timeElapsed += dt;
+
     for (int i = 0; i < dim; ++i) {
         for (int j = 0; j < dim; ++j) {
             if (fixed[i][j]) {
@@ -194,7 +206,14 @@ void Cloth::Update(float dt, glm::vec3 gravity, glm::vec3 airflow, const vector<
             }
 
             // calculate air resistance
-            glm::vec3 velocityInAir = particleVelocity - airflow;
+            float main = 6.0f;
+//            float turbulent = 1.0f;
+//            glm::vec3 localAirflow = main * airflow
+//                    + turbulent * CalculateTurbulentFlow(particlePosition, timeElapsed * 3, 1, 7);
+
+            glm::vec3 localAirflow = main * airflow;
+
+            glm::vec3 velocityInAir = particleVelocity - localAirflow;
 
             acceleration += -dragCoefficient
                     * abs(glm::dot(velocityInAir, currentNormals[i][j])) * velocityInAir;

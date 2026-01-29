@@ -30,6 +30,8 @@ private:
     vector<glm::ivec2> neighborOffsets;
     map<int, map<int, float>> neighborDistances;
 
+    float timeElapsed;
+
     TriangleMesh* mesh;
 public:
     Object* object;

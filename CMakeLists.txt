@@ -56,7 +56,13 @@ add_definitions(-DGLFW_INCLUDE_NONE
         -DPROJECT_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\")
 add_executable(${PROJECT_NAME} ${PROJECT_SOURCES} ${PROJECT_HEADERS}
         ${PROJECT_SHADERS}
-        ${DEPENDENCY_SOURCES} ${PROJECT_RESOURCES})
+        ${DEPENDENCY_SOURCES} ${PROJECT_RESOURCES}
+        headers/SoftBody.h
+        sources/SoftBody.cpp
+        headers/Particle.h
+        headers/Spring.h
+        sources/Spring.cpp
+        sources/Particle.cpp)
 target_link_libraries(${PROJECT_NAME} assimp glfw
         ${GLFW_LIBRARIES} ${GLAD_LIBRARIES})
 
