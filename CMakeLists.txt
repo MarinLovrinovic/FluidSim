@@ -62,7 +62,11 @@ add_executable(${PROJECT_NAME} ${PROJECT_SOURCES} ${PROJECT_HEADERS}
         headers/Particle.h
         headers/Spring.h
         sources/Spring.cpp
-        sources/Particle.cpp)
+        sources/Particle.cpp
+        headers/Fluid.h
+        sources/Fluid.cpp
+        headers/Utils.h
+        sources/Utils.cpp)
 target_link_libraries(${PROJECT_NAME} assimp glfw
         ${GLFW_LIBRARIES} ${GLAD_LIBRARIES})
 

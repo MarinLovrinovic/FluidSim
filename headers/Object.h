@@ -8,6 +8,10 @@
 #include "Light.h"
 #include "Material.h"
 
+#ifdef min
+#pragma message("min macro is defined")
+#endif
+
 class Object {
 private:
     Shader* shader;

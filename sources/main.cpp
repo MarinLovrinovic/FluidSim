@@ -34,6 +34,8 @@
 #include <cstdlib>
 #include <vector>
 
+#include "Fluid.h"
+
 using namespace std;
 
 const double pi = 3.14159265358979323846;
@@ -91,7 +93,7 @@ TriangleMesh* ImportMesh(const string& path, const string& model) {
         cerr << importer.GetErrorString();
         exit(-1);
     }
-    if (!scene->HasMeshes()){
+    if (!scene->HasMeshes()) {
         cerr << "Scene has no meshes." << endl;
         exit(-1);
     }
@@ -104,7 +106,7 @@ TriangleMesh* ImportMesh(const string& path, const string& model) {
     }
 
     vector<glm::vec3> normals;
-    if (mesh->mNormals != nullptr){
+    if (mesh->mNormals != nullptr) {
         for (int i = 0; i < mesh->mNumVertices; i++) {
             auto normal = mesh->mNormals[i];
             normals.emplace_back(normal.x, normal.y, normal.z);
@@ -751,11 +753,11 @@ int main(int argc, char* argv[]) {
     float springConstant = 40;
     float springDampingCoefficient = 500;
     vector<Collider*> colliders = {
-        AddSphereCollider(glm::vec3(2, 0, 0), 1, 0, glm::vec3(0.7, 0.5, 0.3), glm::vec3(0.7, 0.5, 0.3)),
-        AddCubeCollider(glm::vec3(0, -10, 0), 20, 5, glm::vec3(0.7, 0.5, 0.3), glm::vec3(0.7, 0.5, 0.3))
+        // AddSphereCollider(glm::vec3(2, 0, 0), 1, 0, glm::vec3(0.7, 0.5, 0.3), glm::vec3(0.7, 0.5, 0.3)),
+        // AddCubeCollider(glm::vec3(0, -10, 0), 20, 5, glm::vec3(0.7, 0.5, 0.3), glm::vec3(0.7, 0.5, 0.3))
     };
     light.SetPosition(glm::vec3(10, 10, 10));
-    camera.SetPosition(glm::vec3(0, 2, 8));
+    camera.SetPosition(glm::vec3(0, 0, 16));
     TriangleMesh* softBodyMesh = ImportMesh(argv0, "icosmooth");
     glm::vec3 initialPosition = glm::vec3(0, 1.5, 0);
     glm::vec3 initialVelocity = glm::vec3(1, 0, 0);
@@ -776,15 +778,21 @@ int main(int argc, char* argv[]) {
 //    glm::vec3 initialVelocity = glm::vec3(0, 0, 0);
 
 
-    softBodyMesh->Normalize();
-    SoftBody softBody(softBodyMesh, shader, initialPosition, initialVelocity, dt, springConstant, springDampingCoefficient);
-    softBody.object->material->backgroundColor = clothTexBackgroundColor;
-    softBody.object->material->curveColor = clothTexCurveColor;
-    softBody.object->material->curvature = clothTexCurvature;
-    softBody.object->material->curveThickness = clothTexCurveThickness;
-    softBody.object->material->curveFrequency = clothTexCurveFrequency;
+    // softBodyMesh->Normalize();
+    // SoftBody softBody(softBodyMesh, shader, initialPosition, initialVelocity, dt, springConstant, springDampingCoefficient);
+    // softBody.object->material->backgroundColor = clothTexBackgroundColor;
+    // softBody.object->material->curveColor = clothTexCurveColor;
+    // softBody.object->material->curvature = clothTexCurvature;
+    // softBody.object->material->curveThickness = clothTexCurveThickness;
+    // softBody.object->material->curveFrequency = clothTexCurveFrequency;
+    //
+    // renderer->RegisterRenderable(softBody.object);
 
-    renderer->RegisterRenderable(softBody.object);
+    TriangleMesh* fluidParticleMesh = ImportMesh(argv0, "ico");
+    Object fluidObject(fluidParticleMesh, shader);
+    fluidObject.SendToGpu();
+    Fluid fluid(20, 10, 0.8, glm::vec2(0), 0.2f, glm::vec2(-6, -6), glm::vec2(6, 6), &fluidObject);
+    renderer->RegisterRenderable(&fluidObject);
 
     while (!glfwWindowShouldClose(renderer->window)) {
         if (moveVector != glm::vec3(0.0f)) {
@@ -793,7 +801,8 @@ int main(int argc, char* argv[]) {
 
 //        cloth.Update(dt, gravity, airflow, colliders);
 
-        softBody.Update(dt, gravity, airflow, colliders);
+        // softBody.Update(dt, gravity, airflow, colliders);
+        fluid.Update(dt, gravity);
 
         renderer->Render(camera, light);
 
