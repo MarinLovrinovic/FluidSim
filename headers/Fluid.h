@@ -3,6 +3,7 @@
 #include <vector>
 
 #include "Object.h"
+
 #include "glm/vec2.hpp"
 
 
@@ -25,6 +26,7 @@ public:
     Fluid(int particlesX, int particlesY, float smoothingRadius, float targetDensity, float pressureMultiplier, glm::vec2 startingPosition, float particleSize, glm::vec2 corner1, glm::vec2 corner2, Object* object);
     float CalculateDensity(glm::vec2 samplePoint) const;
     float ConvertDensityToPressure(float density) const;
-    glm::vec2 CalculatePressureForce(glm::vec2 samplePoint) const;
+    float CalculateSharedPressure(float densityA, float densityB) const;
+    glm::vec2 CalculatePressureForce(int particleIndex) const;
     void Update(float dt, glm::vec2 gravity);
 };

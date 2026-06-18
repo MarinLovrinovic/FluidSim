@@ -59,12 +59,12 @@ pair<glm::vec3, glm::vec3> TriangleMesh::GetBoundingBox() {
     glm::vec3 min = vertices[0];
     glm::vec3 max = vertices[1];
     for (auto vertex : vertices) {
-        min.x = min(min.x, vertex.x);
-        min.y = min(min.y, vertex.y);
-        min.z = min(min.z, vertex.z);
-        max.x = max(max.x, vertex.x);
-        max.y = max(max.y, vertex.y);
-        max.z = max(max.z, vertex.z);
+        min.x = std::min(min.x, vertex.x);
+        min.y = std::min(min.y, vertex.y);
+        min.z = std::min(min.z, vertex.z);
+        max.x = std::max(max.x, vertex.x);
+        max.y = std::max(max.y, vertex.y);
+        max.z = std::max(max.z, vertex.z);
     }
     return {min, max};
 }

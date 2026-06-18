@@ -2,6 +2,7 @@
 #define IRGLAB_TRIANGLEMESH_H
 
 #include "glm/glm.hpp"
+#define NOMINMAX
 #include "glad/glad.h"
 #include "Renderable.h"
 

@@ -2,7 +2,14 @@
 
 
 // System Headers
+
+
+#define NOMINMAX
+#define WIN32_LEAN_AND_MEAN
 #include <glad/glad.h>
+#ifdef min
+#pragma message("min macro is defined")
+#endif
 #include <GLFW/glfw3.h>
 
 #include <glm/glm.hpp>
@@ -791,7 +798,7 @@ int main(int argc, char* argv[]) {
     TriangleMesh* fluidParticleMesh = ImportMesh(argv0, "ico");
     Object fluidObject(fluidParticleMesh, shader);
     fluidObject.SendToGpu();
-    Fluid fluid(20, 10, 0.8, glm::vec2(0), 0.2f, glm::vec2(-6, -6), glm::vec2(6, 6), &fluidObject);
+    Fluid fluid(10, 10, 1.2, 2.55, 73.98, glm::vec2(0), 0.2f, glm::vec2(-6, -6), glm::vec2(6, 6), &fluidObject);
     renderer->RegisterRenderable(&fluidObject);
 
     while (!glfwWindowShouldClose(renderer->window)) {
@@ -802,7 +809,8 @@ int main(int argc, char* argv[]) {
 //        cloth.Update(dt, gravity, airflow, colliders);
 
         // softBody.Update(dt, gravity, airflow, colliders);
-        fluid.Update(dt, gravity);
+        // fluid.Update(dt, glm::vec2(0));
+        fluid.Update(dt, glm::vec2(0, -10));
 
         renderer->Render(camera, light);
 

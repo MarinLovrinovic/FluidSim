@@ -5,20 +5,39 @@
 #include "Utils.h"
 #include "glm/glm.hpp"
 #include "glm/ext/scalar_constants.hpp"
+#include <glm/gtc/random.hpp>
+
+float pi = glm::pi<float>();
+
+float SmoothingKernelFlat(const float radius, const float distance)
+{
+    const float volume = pi * glm::pow(radius, 8) / 4;
+    const float value = max(0.0f, radius * radius - distance * distance);
+    return value * value * value / volume;
+}
+
+float SmoothingKernelDerivativeFlat(const float radius, const float distance)
+{
+    if (distance >= radius) return 0;
+    const float f = radius * radius - distance * distance;
+    const float scale = -24 / (pi * glm::pow(radius, 8));
+    return scale * distance * f * f;
+}
 
 float SmoothingKernel(const float radius, const float distance)
 {
-    const float volume = glm::pi * glm::pow(radius, 8) / 4;
-    const float value = max(0, radius * radius - distance * distance);
-    return value * value * value / volume;
+    if (distance >= radius) return 0;
+
+    const float volume = (pi * glm::pow(radius, 4)) / 6;
+    return (radius - distance) * (radius - distance) / volume;
 }
 
 float SmoothingKernelDerivative(const float radius, const float distance)
 {
     if (distance >= radius) return 0;
-    const float f = radius * radius - distance * distance;
-    const float scale = -24 / (glm::pi * glm::pow(radius, 8));
-    return scale * distance * f * f;
+
+    const float scale = 12 / (glm::pow(radius, 4) * pi);
+    return (distance - radius) * scale;
 }
 
 void UpdateTransforms()
@@ -99,19 +118,30 @@ float Fluid::ConvertDensityToPressure(const float density) const
     return pressure;
 }
 
-glm::vec2 Fluid::CalculatePressureForce(const glm::vec2 samplePoint) const
+float Fluid::CalculateSharedPressure(float densityA, float densityB) const
+{
+    float pressureA = ConvertDensityToPressure(densityA);
+    float pressureB = ConvertDensityToPressure(densityB);
+    return (pressureA + pressureB) / 2;
+}
+
+glm::vec2 Fluid::CalculatePressureForce(const int particleIndex) const
 {
     glm::vec2 pressureForce(0);
     constexpr float mass = 1;
+    const float particleDensity = densities[particleIndex];
 
-    for (int i = 0; i < particleCount; i++)
+    for (int otherParticleIndex = 0; otherParticleIndex < particleCount; otherParticleIndex++)
     {
-        glm::vec2 toParticle = currentPositions[i] - samplePoint;
-        const float distance = glm::length(toParticle);
-        glm::vec2 direction = toParticle / distance;
+        if (otherParticleIndex == particleIndex) continue;
+        glm::vec2 offset = currentPositions[otherParticleIndex] - currentPositions[particleIndex];
+        const float distance = glm::length(offset);
+        // pick a random direction in case two particles share the same position
+        glm::vec2 direction = distance == 0 ? glm::circularRand(1.0f) : offset / distance;
         const float slope = SmoothingKernelDerivative(smoothingRadius, distance);
-        const float density = densities[i];
-        pressureForce += -ConvertDensityToPressure(density) * direction * slope * mass / density;
+        const float otherParticleDensity = densities[otherParticleIndex];
+        const float sharedPressure = CalculateSharedPressure(particleDensity, otherParticleDensity);
+        pressureForce += sharedPressure * direction * slope * mass / otherParticleDensity;
     }
     return pressureForce;
 }
@@ -131,7 +161,7 @@ void Fluid::Update(const float dt, const glm::vec2 gravity)
     // TODO: accumulate SPH forces for each particle
     for (int i = 0; i < particleCount; i++)
     {
-        forces[i] += CalculatePressureForce(currentPositions[i]);
+        forces[i] += CalculatePressureForce(i);
     }
 
 
