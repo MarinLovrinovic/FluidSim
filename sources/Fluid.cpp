@@ -75,6 +75,7 @@ Fluid::Fluid(
     const float viscosityStrength,
     const glm::vec2 startingPosition,
     const float particleSize,
+    const float particleSpacing,
     const glm::vec2 corner1,
     const glm::vec2 corner2,
     Object* object) :
@@ -102,7 +103,7 @@ corner2(corner2)
         for (int y = 0; y < particlesY; ++y)
         {
             int index = y * particlesX + x;
-            glm::vec2 particlePosition = startingPosition + glm::vec2(particleSize * x, particleSize * y);
+            glm::vec2 particlePosition = startingPosition + glm::vec2(particleSpacing * x, particleSpacing * y);
             previousPositions[index] = particlePosition;
             currentPositions[index] = particlePosition;
         }

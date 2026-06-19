@@ -38,7 +38,7 @@ private:
     Object* object;
     glm::vec2 corner1, corner2;
 public:
-    Fluid(int particlesX, int particlesY, float smoothingRadius, float targetDensity, float pressureMultiplier, float viscosityStrength, glm::vec2 startingPosition, float particleSize, glm::vec2 corner1, glm::vec2 corner2, Object* object);
+    Fluid(int particlesX, int particlesY, float smoothingRadius, float targetDensity, float pressureMultiplier, float viscosityStrength, glm::vec2 startingPosition, float particleSize, float particleSpacing, glm::vec2 corner1, glm::vec2 corner2, Object* object);
     float CalculateDensity(glm::vec2 samplePoint) const;
     float ConvertDensityToPressure(float density) const;
     float CalculateSharedPressure(float densityA, float densityB) const;
