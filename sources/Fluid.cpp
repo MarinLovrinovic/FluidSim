@@ -235,7 +235,9 @@ void Fluid::Update(const float dt, const glm::vec2 gravity)
         predictedPositions[i] = currentPositions[i] + currentPositions[i] - previousPositions[i];
     }
 
+    auto spatialLookupStart = std::chrono::high_resolution_clock::now();
     UpdateSpatialLookup();
+    auto spatialLookupEnd = std::chrono::high_resolution_clock::now();
 
     auto densityStart = std::chrono::high_resolution_clock::now();
     for (int i = 0; i < particleCount; i++)
@@ -268,7 +270,7 @@ void Fluid::Update(const float dt, const glm::vec2 gravity)
 
         // calculate collisions
         constexpr bool bounce = true;
-        const float bounceFactor = 0.3f;
+        const float bounceFactor = 0.05f;
         const glm::vec2 minPos = glm::vec2(min(corner1.x, corner2.x), min(corner1.y, corner2.y));
         const glm::vec2 maxPos = glm::vec2(max(corner1.x, corner2.x), max(corner1.y, corner2.y));
         if (bounce)
@@ -308,10 +310,11 @@ void Fluid::Update(const float dt, const glm::vec2 gravity)
     }
     auto collisionsEnd = std::chrono::high_resolution_clock::now();
 
+    double spatialLookupMs = std::chrono::duration<double, std::milli>(spatialLookupEnd - spatialLookupStart).count();
     double densityMs = std::chrono::duration<double, std::milli>(densityEnd - densityStart).count();
     double pressureMs = std::chrono::duration<double, std::milli>(pressureEnd - pressureStart).count();
     double viscosityMs = std::chrono::duration<double, std::milli>(viscosityEnd - viscosityStart).count();
     double collisionsMs = std::chrono::duration<double, std::milli>(collisionsEnd - collisionsStart).count();
-    std::cout << "Density: " << densityMs << " ms, Pressure: " << pressureMs << " ms, Viscosity: " << viscosityMs << " ms, Integration and collisions: " << collisionsMs << " ms\n";
+    std::cout << "Spatial lookup: " << spatialLookupMs << " ms, Density: " << densityMs << " ms, Pressure: " << pressureMs << " ms, Viscosity: " << viscosityMs << " ms, Integration and collisions: " << collisionsMs << " ms\n";
 
 }

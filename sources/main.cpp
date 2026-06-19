@@ -322,7 +322,7 @@ int main(int argc, char* argv[]) {
     shader = LoadShader(argv[0], "scene");
     Light light;
 
-    float dt = 0.002f;
+    float dt = 0.01f;
     vector<Collider*> colliders = { };
     light.SetPosition(glm::vec3(10, 10, 10));
     camera.SetPosition(glm::vec3(0, 0, 16));
@@ -330,7 +330,7 @@ int main(int argc, char* argv[]) {
     TriangleMesh* fluidParticleMesh = ImportMesh(argv0, "ico");
     Object fluidObject(fluidParticleMesh, shader);
     fluidObject.SendToGpu();
-    Fluid fluid(20, 20, 1.0, 3.55, 200, 0.2 , glm::vec2(0), 0.2f, glm::vec2(-6, -6), glm::vec2(6, 6), &fluidObject);
+    Fluid fluid(63, 63, 0.35, 5.2, 27.44, 0.2 , glm::vec2(0), 0.5f, glm::vec2(-6, -6), glm::vec2(6, 6), &fluidObject);
     renderer->RegisterRenderable(&fluidObject);
 
     while (!glfwWindowShouldClose(renderer->window)) {
