@@ -1,6 +1,10 @@
 #include "Fluid.h"
 
+#include <chrono>
+#include <iostream>
 #include <random>
+#include <limits>
+#include <optional>
 
 #include "Utils.h"
 #include "glm/glm.hpp"
@@ -11,6 +15,8 @@ float pi = glm::pi<float>();
 
 float SmoothingKernelFlat(const float radius, const float distance)
 {
+    if (distance >= radius) return 0;
+
     const float volume = pi * glm::pow(radius, 8) / 4;
     const float value = max(0.0f, radius * radius - distance * distance);
     return value * value * value / volume;
@@ -19,6 +25,7 @@ float SmoothingKernelFlat(const float radius, const float distance)
 float SmoothingKernelDerivativeFlat(const float radius, const float distance)
 {
     if (distance >= radius) return 0;
+
     const float f = radius * radius - distance * distance;
     const float scale = -24 / (pi * glm::pow(radius, 8));
     return scale * distance * f * f;
@@ -40,6 +47,20 @@ float SmoothingKernelDerivative(const float radius, const float distance)
     return (distance - radius) * scale;
 }
 
+glm::vec<2, int> Fluid::PositionToCellCoord(const glm::vec2 point, const float radius)
+{
+    const int cellX = static_cast<int>(point.x / radius);
+    const int cellY = static_cast<int>(point.y / radius);
+    return {cellX, cellY};
+}
+
+unsigned int Fluid::HashCell(const int cellX, const int cellY)
+{
+    const unsigned int a = static_cast<unsigned int>(cellX) * 15823;
+    const unsigned int b = static_cast<unsigned int>(cellY) * 9737333;
+    return a + b;
+}
+
 void UpdateTransforms()
 {
 
@@ -51,6 +72,7 @@ Fluid::Fluid(
     const float smoothingRadius,
     const float targetDensity,
     const float pressureMultiplier,
+    const float viscosityStrength,
     const glm::vec2 startingPosition,
     const float particleSize,
     const glm::vec2 corner1,
@@ -60,14 +82,18 @@ particleCount(particlesX * particlesY),
 smoothingRadius(smoothingRadius),
 targetDensity(targetDensity),
 pressureMultiplier(pressureMultiplier),
+viscosityStrength(viscosityStrength),
 object(object),
 corner1(corner1),
 corner2(corner2)
 {
     previousPositions.resize(particleCount);
     currentPositions.resize(particleCount);
+    velocities.resize(particleCount);
     forces.resize(particleCount);
     densities.resize(particleCount);
+    spatialLookup.resize(particleCount);
+    startIndices.resize(particleCount);
     object->transforms.resize(particleCount);
 
     for (int x = 0; x < particlesX; ++x)
@@ -102,12 +128,13 @@ float Fluid::CalculateDensity(const glm::vec2 samplePoint) const
     float density = 0;
     constexpr float mass = 1;
 
-    for (glm::vec2 position : currentPositions)
+    ForeachPointWithinRadius(samplePoint, [&](const int pointIndex)
     {
+        const glm::vec2 position = currentPositions[pointIndex];
         const float distance = glm::length(position - samplePoint);
         const float influence = SmoothingKernel(smoothingRadius, distance);
         density += mass * influence;
-    }
+    });
     return density;
 }
 
@@ -131,19 +158,72 @@ glm::vec2 Fluid::CalculatePressureForce(const int particleIndex) const
     constexpr float mass = 1;
     const float particleDensity = densities[particleIndex];
 
-    for (int otherParticleIndex = 0; otherParticleIndex < particleCount; otherParticleIndex++)
+    const glm::vec2 particlePosition = currentPositions[particleIndex];
+    ForeachPointWithinRadius(particlePosition, [&](const int otherParticleIndex)
     {
-        if (otherParticleIndex == particleIndex) continue;
-        glm::vec2 offset = currentPositions[otherParticleIndex] - currentPositions[particleIndex];
-        const float distance = glm::length(offset);
-        // pick a random direction in case two particles share the same position
-        glm::vec2 direction = distance == 0 ? glm::circularRand(1.0f) : offset / distance;
-        const float slope = SmoothingKernelDerivative(smoothingRadius, distance);
-        const float otherParticleDensity = densities[otherParticleIndex];
-        const float sharedPressure = CalculateSharedPressure(particleDensity, otherParticleDensity);
-        pressureForce += sharedPressure * direction * slope * mass / otherParticleDensity;
-    }
+        if (otherParticleIndex != particleIndex)
+        {
+            const glm::vec2 offset = currentPositions[otherParticleIndex] - particlePosition;
+            const float distance = glm::length(offset);
+            // pick a random direction in case two particles share the same position
+            const glm::vec2 direction = distance == 0 ? glm::circularRand(1.0f) : offset / distance;
+            const float slope = SmoothingKernelDerivative(smoothingRadius, distance);
+            const float otherParticleDensity = densities[otherParticleIndex];
+            const float sharedPressure = CalculateSharedPressure(particleDensity, otherParticleDensity);
+            pressureForce += sharedPressure * direction * slope * mass / otherParticleDensity;
+        }
+    });
     return pressureForce;
+}
+
+glm::vec2 Fluid::CalculateViscosityForce(int particleIndex) const
+{
+    glm::vec2 viscosityForce(0);
+    const glm::vec2 particlePosition = currentPositions[particleIndex];
+
+    ForeachPointWithinRadius(particlePosition, [&](const int otherParticleIndex)
+    {
+        if (otherParticleIndex != particleIndex)
+        {
+            const float distance = glm::length(particlePosition - currentPositions[otherParticleIndex]);
+            const float influence = SmoothingKernelFlat(smoothingRadius, distance);
+            viscosityForce += (velocities[otherParticleIndex] - velocities[particleIndex]) * influence;
+        }
+    });
+    return viscosityForce * viscosityStrength;
+}
+
+unsigned int Fluid::GetKeyFromHash(unsigned int hash) const
+{
+    return hash % static_cast<unsigned int>(particleCount);
+}
+
+void Fluid::UpdateSpatialLookup()
+{
+    // create unordered spatial lookup
+    for (int i = 0; i < particleCount; i++)
+    {
+        const glm::vec<2, int> cell = PositionToCellCoord(currentPositions[i], smoothingRadius);
+        const unsigned int cellKey = GetKeyFromHash(HashCell(cell.x, cell.y));
+        spatialLookup[i] = SpatialLookupEntry {
+            i,
+            cellKey
+        };
+        startIndices[i] = std::numeric_limits<int>::max();
+    }
+
+    // sort by cell key
+    std::sort(spatialLookup.begin(), spatialLookup.end());
+
+    // calculate start indices of each unique cell key in the spatial lookup
+    for (int i = 0; i < particleCount; i++)
+    {
+        const unsigned int key = spatialLookup[i].cellKey;
+        if (i == 0 || spatialLookup[i - 1].cellKey != key)
+        {
+            startIndices[key] = i;
+        }
+    }
 }
 
 void Fluid::Update(const float dt, const glm::vec2 gravity)
@@ -153,33 +233,30 @@ void Fluid::Update(const float dt, const glm::vec2 gravity)
         forces[i] = gravity;
     }
 
+    UpdateSpatialLookup();
+
+    auto densityStart = std::chrono::high_resolution_clock::now();
     for (int i = 0; i < particleCount; i++)
     {
         densities[i] = CalculateDensity(currentPositions[i]);
     }
+    auto densityEnd = std::chrono::high_resolution_clock::now();
 
-    // TODO: accumulate SPH forces for each particle
+    auto pressureStart = std::chrono::high_resolution_clock::now();
     for (int i = 0; i < particleCount; i++)
     {
         forces[i] += CalculatePressureForce(i);
     }
+    auto pressureEnd = std::chrono::high_resolution_clock::now();
 
+    auto viscosityStart = std::chrono::high_resolution_clock::now();
+    for (int i = 0; i < particleCount; i++)
+    {
+        forces[i] += CalculateViscosityForce(i);
+    }
+    auto viscosityEnd = std::chrono::high_resolution_clock::now();
 
-    // for (int i = 0; i < particleCount; i++)
-    // {
-    //     for (int j = 0; j < particleCount; j++)
-    //     {
-    //         if (i == j) continue;
-    //
-    //         // this gives us a repelling force with magnitude = 1 / distance
-    //         glm::vec2 fromOtherParticle = currentPositions[i] - currentPositions[j];
-    //         float distance = glm::length(fromOtherParticle);
-    //         if (distance < 0.1f || distance > 0.5f) continue;
-    //
-    //         forces[i] += 0.2f * fromOtherParticle / (distance * distance);
-    //     }
-    // }
-
+    auto collisionsStart = std::chrono::high_resolution_clock::now();
     for (int i = 0; i < particleCount; i++)
     {
         glm::vec2 acceleration = forces[i] / densities[i];
@@ -216,13 +293,23 @@ void Fluid::Update(const float dt, const glm::vec2 gravity)
                 currentPosition = Mirror(currentPosition, maxPos, glm::vec2(0, -1));
                 currentPosition += (nextPosition - currentPosition) * (1 - bounceFactor);
             }
-        } else
+        }
+        else
         {
             nextPosition = glm::clamp(nextPosition, minPos, maxPos);
         }
 
         previousPositions[i] = currentPosition;
         currentPositions[i] = nextPosition;
+        velocities[i] = (currentPositions[i] - previousPositions[i]) / dt;
         object->transforms[i].SetPosition(glm::vec3(currentPositions[i], 0));
     }
+    auto collisionsEnd = std::chrono::high_resolution_clock::now();
+
+    double densityMs = std::chrono::duration<double, std::milli>(densityEnd - densityStart).count();
+    double pressureMs = std::chrono::duration<double, std::milli>(pressureEnd - pressureStart).count();
+    double viscosityMs = std::chrono::duration<double, std::milli>(viscosityEnd - viscosityStart).count();
+    double collisionsMs = std::chrono::duration<double, std::milli>(collisionsEnd - collisionsStart).count();
+    std::cout << "Density: " << densityMs << " ms, Pressure: " << pressureMs << " ms, Viscosity: " << viscosityMs << " ms, Integration and collisions: " << collisionsMs << " ms\n";
+
 }

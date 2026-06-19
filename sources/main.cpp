@@ -798,26 +798,33 @@ int main(int argc, char* argv[]) {
     TriangleMesh* fluidParticleMesh = ImportMesh(argv0, "ico");
     Object fluidObject(fluidParticleMesh, shader);
     fluidObject.SendToGpu();
-    Fluid fluid(10, 10, 1.2, 2.55, 73.98, glm::vec2(0), 0.2f, glm::vec2(-6, -6), glm::vec2(6, 6), &fluidObject);
+    Fluid fluid(20, 20, 1.4, 3.55, 200, 0.5, glm::vec2(0), 0.2f, glm::vec2(-6, -6), glm::vec2(6, 6), &fluidObject);
     renderer->RegisterRenderable(&fluidObject);
 
     while (!glfwWindowShouldClose(renderer->window)) {
+        auto frameStart = std::chrono::high_resolution_clock::now();
         if (moveVector != glm::vec3(0.0f)) {
             camera.Move(dt * camera.LocalToGlobalDir() * glm::vec4(moveVector, 0.0f));
         }
 
-//        cloth.Update(dt, gravity, airflow, colliders);
-
-        // softBody.Update(dt, gravity, airflow, colliders);
-        // fluid.Update(dt, glm::vec2(0));
+        auto simStart = std::chrono::high_resolution_clock::now();
         fluid.Update(dt, glm::vec2(0, -10));
+        auto simEnd = std::chrono::high_resolution_clock::now();
 
+        auto renderStart = std::chrono::high_resolution_clock::now();
         renderer->Render(camera, light);
+        auto renderEnd = std::chrono::high_resolution_clock::now();
 
         glfwPollEvents();
         if (glfwGetKey(renderer->window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
             glfwSetWindowShouldClose(renderer->window, true);
         glfwSetCursorPos(renderer->window, renderer->width * 0.5, renderer->height * 0.5);
+        auto frameEnd = std::chrono::high_resolution_clock::now();
+
+        double simMs = std::chrono::duration<double, std::milli>(simEnd - simStart).count();
+        double renderMs = std::chrono::duration<double, std::milli>(renderEnd - renderStart).count();
+        double frameMs = std::chrono::duration<double, std::milli>(frameEnd - frameStart).count();
+        std::cout << "Sim: " << simMs << " ms, Render: " << renderMs << " ms, Frame: " << frameMs << " ms\n";
     }
     delete renderer;
     for (auto collider : colliders) {
