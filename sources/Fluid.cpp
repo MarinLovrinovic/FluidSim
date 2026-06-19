@@ -89,6 +89,7 @@ corner2(corner2)
 {
     previousPositions.resize(particleCount);
     currentPositions.resize(particleCount);
+    predictedPositions.resize(particleCount);
     velocities.resize(particleCount);
     forces.resize(particleCount);
     densities.resize(particleCount);
@@ -130,7 +131,7 @@ float Fluid::CalculateDensity(const glm::vec2 samplePoint) const
 
     ForeachPointWithinRadius(samplePoint, [&](const int pointIndex)
     {
-        const glm::vec2 position = currentPositions[pointIndex];
+        const glm::vec2 position = predictedPositions[pointIndex];
         const float distance = glm::length(position - samplePoint);
         const float influence = SmoothingKernel(smoothingRadius, distance);
         density += mass * influence;
@@ -158,12 +159,12 @@ glm::vec2 Fluid::CalculatePressureForce(const int particleIndex) const
     constexpr float mass = 1;
     const float particleDensity = densities[particleIndex];
 
-    const glm::vec2 particlePosition = currentPositions[particleIndex];
+    const glm::vec2 particlePosition = predictedPositions[particleIndex];
     ForeachPointWithinRadius(particlePosition, [&](const int otherParticleIndex)
     {
         if (otherParticleIndex != particleIndex)
         {
-            const glm::vec2 offset = currentPositions[otherParticleIndex] - particlePosition;
+            const glm::vec2 offset = predictedPositions[otherParticleIndex] - particlePosition;
             const float distance = glm::length(offset);
             // pick a random direction in case two particles share the same position
             const glm::vec2 direction = distance == 0 ? glm::circularRand(1.0f) : offset / distance;
@@ -179,13 +180,13 @@ glm::vec2 Fluid::CalculatePressureForce(const int particleIndex) const
 glm::vec2 Fluid::CalculateViscosityForce(int particleIndex) const
 {
     glm::vec2 viscosityForce(0);
-    const glm::vec2 particlePosition = currentPositions[particleIndex];
+    const glm::vec2 particlePosition = predictedPositions[particleIndex];
 
     ForeachPointWithinRadius(particlePosition, [&](const int otherParticleIndex)
     {
         if (otherParticleIndex != particleIndex)
         {
-            const float distance = glm::length(particlePosition - currentPositions[otherParticleIndex]);
+            const float distance = glm::length(particlePosition - predictedPositions[otherParticleIndex]);
             const float influence = SmoothingKernelFlat(smoothingRadius, distance);
             viscosityForce += (velocities[otherParticleIndex] - velocities[particleIndex]) * influence;
         }
@@ -203,7 +204,7 @@ void Fluid::UpdateSpatialLookup()
     // create unordered spatial lookup
     for (int i = 0; i < particleCount; i++)
     {
-        const glm::vec<2, int> cell = PositionToCellCoord(currentPositions[i], smoothingRadius);
+        const glm::vec<2, int> cell = PositionToCellCoord(predictedPositions[i], smoothingRadius);
         const unsigned int cellKey = GetKeyFromHash(HashCell(cell.x, cell.y));
         spatialLookup[i] = SpatialLookupEntry {
             i,
@@ -231,6 +232,7 @@ void Fluid::Update(const float dt, const glm::vec2 gravity)
     for (int i = 0; i < particleCount; i++)
     {
         forces[i] = gravity;
+        predictedPositions[i] = currentPositions[i] + currentPositions[i] - previousPositions[i];
     }
 
     UpdateSpatialLookup();
@@ -238,7 +240,7 @@ void Fluid::Update(const float dt, const glm::vec2 gravity)
     auto densityStart = std::chrono::high_resolution_clock::now();
     for (int i = 0; i < particleCount; i++)
     {
-        densities[i] = CalculateDensity(currentPositions[i]);
+        densities[i] = CalculateDensity(predictedPositions[i]);
     }
     auto densityEnd = std::chrono::high_resolution_clock::now();
 

@@ -29,6 +29,7 @@ private:
     float viscosityStrength;
     vector<glm::vec2> previousPositions;
     vector<glm::vec2> currentPositions;
+    vector<glm::vec2> predictedPositions;
     vector<glm::vec2> velocities;
     vector<glm::vec2> forces;
     vector<float> densities;
@@ -72,7 +73,7 @@ void Fluid::ForeachPointWithinRadius(const glm::vec2 samplePoint, F&& f) const
                 if (spatialLookupEntry.cellKey != key) break;
 
                 const int particleIndex = spatialLookupEntry.particleIndex;
-                const auto offset = currentPositions[particleIndex] - samplePoint;
+                const auto offset = predictedPositions[particleIndex] - samplePoint;
                 const float sqrDistance = glm::dot(offset, offset);
 
                 // test if the point is inside the radius
