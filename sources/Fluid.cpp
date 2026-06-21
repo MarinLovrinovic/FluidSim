@@ -5,6 +5,8 @@
 #include <random>
 #include <limits>
 #include <optional>
+#include <execution>
+#include <algorithm>
 
 #include "Utils.h"
 #include "glm/glm.hpp"
@@ -91,6 +93,7 @@ corner2(corner2)
     previousPositions.resize(particleCount);
     currentPositions.resize(particleCount);
     predictedPositions.resize(particleCount);
+    particleIndices.resize(particleCount);
     velocities.resize(particleCount);
     forces.resize(particleCount);
     densities.resize(particleCount);
@@ -122,6 +125,7 @@ corner2(corner2)
         // previousPositions[i] += offset;
         object->transforms[i].SetPosition(glm::vec3(currentPositions[i], 0));
         object->transforms[i].SetScale(glm::vec3(particleSize));
+        particleIndices[i] = i;
     }
 }
 
@@ -221,7 +225,7 @@ unsigned int Fluid::GetKeyFromHash(unsigned int hash) const
 void Fluid::UpdateSpatialLookup()
 {
     // create unordered spatial lookup
-    for (int i = 0; i < particleCount; i++)
+    for_each(execution::par, particleIndices.begin(), particleIndices.end(), [&](auto i)
     {
         const glm::vec<2, int> cell = PositionToCellCoord(predictedPositions[i], smoothingRadius);
         const unsigned int cellKey = GetKeyFromHash(HashCell(cell.x, cell.y));
@@ -230,35 +234,41 @@ void Fluid::UpdateSpatialLookup()
             cellKey
         };
         startIndices[i] = std::numeric_limits<int>::max();
-    }
+    });
 
     // sort by cell key
-    std::sort(spatialLookup.begin(), spatialLookup.end());
+    std::sort(execution::par, spatialLookup.begin(), spatialLookup.end());
 
     // calculate start indices of each unique cell key in the spatial lookup
-    for (int i = 0; i < particleCount; i++)
+    for_each(execution::par, particleIndices.begin(), particleIndices.end(), [&](auto i)
     {
         const unsigned int key = spatialLookup[i].cellKey;
         if (i == 0 || spatialLookup[i - 1].cellKey != key)
         {
             startIndices[key] = i;
         }
-    }
+    });
 }
 
 void Fluid::Update(const float dt, const glm::vec2 gravity, const optional<glm::vec3> interaction)
 {
-    for (int i = 0; i < particleCount; i++)
+    for_each(execution::par, particleIndices.begin(), particleIndices.end(), [&](auto i)
+    {
+
+    });
+
+    for_each(execution::par, particleIndices.begin(), particleIndices.end(), [&](auto i)
     {
         forces[i] = gravity;
         predictedPositions[i] = currentPositions[i] + currentPositions[i] - previousPositions[i];
-    }
+    });
+
     if (interaction.has_value())
     {
-        for (int i = 0; i < particleCount; i++)
+        for_each(execution::par, particleIndices.begin(), particleIndices.end(), [&](auto i)
         {
             forces[i] += CalculateInteractionForce(interaction.value(), 2, 200 * interaction.value().z, i);
-        }
+        });
     }
 
     auto spatialLookupStart = std::chrono::high_resolution_clock::now();
@@ -266,28 +276,28 @@ void Fluid::Update(const float dt, const glm::vec2 gravity, const optional<glm::
     auto spatialLookupEnd = std::chrono::high_resolution_clock::now();
 
     auto densityStart = std::chrono::high_resolution_clock::now();
-    for (int i = 0; i < particleCount; i++)
+    for_each(execution::par, particleIndices.begin(), particleIndices.end(), [&](auto i)
     {
         densities[i] = CalculateDensity(predictedPositions[i]);
-    }
+    });
     auto densityEnd = std::chrono::high_resolution_clock::now();
 
     auto pressureStart = std::chrono::high_resolution_clock::now();
-    for (int i = 0; i < particleCount; i++)
+    for_each(execution::par, particleIndices.begin(), particleIndices.end(), [&](auto i)
     {
         forces[i] += CalculatePressureForce(i);
-    }
+    });
     auto pressureEnd = std::chrono::high_resolution_clock::now();
 
     auto viscosityStart = std::chrono::high_resolution_clock::now();
-    for (int i = 0; i < particleCount; i++)
+    for_each(execution::par, particleIndices.begin(), particleIndices.end(), [&](auto i)
     {
         forces[i] += CalculateViscosityForce(i);
-    }
+    });
     auto viscosityEnd = std::chrono::high_resolution_clock::now();
 
     auto collisionsStart = std::chrono::high_resolution_clock::now();
-    for (int i = 0; i < particleCount; i++)
+    for_each(execution::par, particleIndices.begin(), particleIndices.end(), [&](auto i)
     {
         glm::vec2 acceleration = forces[i] / densities[i];
         glm::vec2 currentPosition = currentPositions[i];
@@ -333,7 +343,7 @@ void Fluid::Update(const float dt, const glm::vec2 gravity, const optional<glm::
         currentPositions[i] = nextPosition;
         velocities[i] = (currentPositions[i] - previousPositions[i]) / dt;
         object->transforms[i].SetPosition(glm::vec3(currentPositions[i], 0));
-    }
+    });
     auto collisionsEnd = std::chrono::high_resolution_clock::now();
 
     double spatialLookupMs = std::chrono::duration<double, std::milli>(spatialLookupEnd - spatialLookupStart).count();
@@ -341,5 +351,5 @@ void Fluid::Update(const float dt, const glm::vec2 gravity, const optional<glm::
     double pressureMs = std::chrono::duration<double, std::milli>(pressureEnd - pressureStart).count();
     double viscosityMs = std::chrono::duration<double, std::milli>(viscosityEnd - viscosityStart).count();
     double collisionsMs = std::chrono::duration<double, std::milli>(collisionsEnd - collisionsStart).count();
-    // std::cout << "Spatial lookup: " << spatialLookupMs << " ms, Density: " << densityMs << " ms, Pressure: " << pressureMs << " ms, Viscosity: " << viscosityMs << " ms, Integration and collisions: " << collisionsMs << " ms\n";
+    std::cout << "Spatial lookup: " << spatialLookupMs << " ms, Density: " << densityMs << " ms, Pressure: " << pressureMs << " ms, Viscosity: " << viscosityMs << " ms, Integration and collisions: " << collisionsMs << " ms\n";
 }

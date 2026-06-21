@@ -31,6 +31,7 @@ private:
     vector<glm::vec2> previousPositions;
     vector<glm::vec2> currentPositions;
     vector<glm::vec2> predictedPositions;
+    vector<int> particleIndices;
     vector<glm::vec2> velocities;
     vector<glm::vec2> forces;
     vector<float> densities;

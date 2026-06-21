@@ -392,7 +392,7 @@ int main(int argc, char* argv[]) {
         double simMs = std::chrono::duration<double, std::milli>(simEnd - simStart).count();
         double renderMs = std::chrono::duration<double, std::milli>(renderEnd - renderStart).count();
         double frameMs = std::chrono::duration<double, std::milli>(frameEnd - frameStart).count();
-        // std::cout << "Sim: " << simMs << " ms, Render: " << renderMs << " ms, Frame: " << frameMs << " ms\n";
+        std::cout << "Sim: " << simMs << " ms, Render: " << renderMs << " ms, Frame: " << frameMs << " ms\n";
     }
     delete renderer;
     for (auto collider : colliders) {
