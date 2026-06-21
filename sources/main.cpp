@@ -42,6 +42,7 @@
 #include <vector>
 
 #include "Fluid.h"
+#include "Utils.h"
 
 using namespace std;
 
@@ -232,7 +233,7 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mods
 {
     if (action == GLFW_REPEAT) return;
 
-    bool pressed = action == GLFW_PRESS;
+    const bool pressed = action == GLFW_PRESS;
     if (key == GLFW_KEY_W) {
         forwardPressed = pressed;
     } else if (key == GLFW_KEY_A) {
@@ -252,6 +253,27 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mods
     moveVector = glm::vec3((rightPressed ? 1.0f : 0.0f) + (leftPressed ? -1.0f : 0.0f),
                            (upPressed ? 1.0f : 0.0f) + (downPressed ? -1.0f : 0.0f),
                            (backPressed ? 1.0f : 0.0f) + (forwardPressed ? -1.0f : 0.0f));
+}
+
+bool pullPressed;
+bool pushPressed;
+
+float interactionStrength;
+
+void MouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
+{
+    if (action == GLFW_REPEAT) return;
+
+    const bool pressed = action == GLFW_PRESS;
+    if (button == GLFW_MOUSE_BUTTON_LEFT) {
+        pullPressed = pressed;
+    } else if (button == GLFW_MOUSE_BUTTON_RIGHT) {
+        pushPressed = pressed;
+    } else {
+        return;
+    }
+
+    interactionStrength = (pullPressed ? 1.0f : 0.0f) + (pushPressed ? -1.0f : 0.0f);
 }
 
 string argv0;
@@ -317,6 +339,7 @@ int main(int argc, char* argv[]) {
     glfwSetFramebufferSizeCallback(renderer->window, FramebufferSizeCallback); //funkcija koja se poziva prilikom mijenjanja velicine prozora
     glfwSetCursorPosCallback(renderer->window, CursorPosCallback);
     glfwSetKeyCallback(renderer->window, KeyCallback);
+    glfwSetMouseButtonCallback(renderer->window, MouseButtonCallback);
     glfwSetInputMode(renderer->window, GLFW_CURSOR, GLFW_CURSOR_HIDDEN);
     glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     shader = LoadShader(argv[0], "scene");
@@ -333,14 +356,27 @@ int main(int argc, char* argv[]) {
     Fluid fluid(40, 40, 0.35, 22.2, 47.44, 0.2 , glm::vec2(0), 0.05f, 0.07, glm::vec2(-6, -6), glm::vec2(6, 6), &fluidObject);
     renderer->RegisterRenderable(&fluidObject);
 
+    Object interactionIndicator(fluidParticleMesh, shader);
+    interactionIndicator.material->backgroundColor = glm::vec3(1, 0, 0);
+    interactionIndicator.transforms[0].SetScale(glm::vec3(0.1));
+    interactionIndicator.SendToGpu();
+    renderer->RegisterRenderable(&interactionIndicator);
+
     while (!glfwWindowShouldClose(renderer->window)) {
         auto frameStart = std::chrono::high_resolution_clock::now();
         if (moveVector != glm::vec3(0.0f)) {
             camera.Move(dt * camera.LocalToGlobalDir() * glm::vec4(moveVector, 0.0f));
         }
+        optional<glm::vec3> interaction = nullopt;
+        if (interactionStrength != 0) {
+            interaction = RaycastZ0(camera.GetPosition(), camera.GetLocalZ());
+            interactionIndicator.transforms[0].SetPosition(interaction.value());
+            interaction.value().z = interactionStrength;
+        }
 
         auto simStart = std::chrono::high_resolution_clock::now();
-        fluid.Update(dt, glm::vec2(0, -10));
+        fluid.Update(dt, glm::vec2(0, -20), interaction);
+        fluid.Update(dt, glm::vec2(0, -20), interaction);
         auto simEnd = std::chrono::high_resolution_clock::now();
 
         auto renderStart = std::chrono::high_resolution_clock::now();
@@ -356,7 +392,7 @@ int main(int argc, char* argv[]) {
         double simMs = std::chrono::duration<double, std::milli>(simEnd - simStart).count();
         double renderMs = std::chrono::duration<double, std::milli>(renderEnd - renderStart).count();
         double frameMs = std::chrono::duration<double, std::milli>(frameEnd - frameStart).count();
-        std::cout << "Sim: " << simMs << " ms, Render: " << renderMs << " ms, Frame: " << frameMs << " ms\n";
+        // std::cout << "Sim: " << simMs << " ms, Render: " << renderMs << " ms, Frame: " << frameMs << " ms\n";
     }
     delete renderer;
     for (auto collider : colliders) {

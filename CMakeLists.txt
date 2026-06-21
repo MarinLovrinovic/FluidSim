@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.28)
 project(ClothSim)
 
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 option(GLFW_BUILD_DOCS OFF)
 option(GLFW_BUILD_EXAMPLES OFF)
@@ -84,6 +86,5 @@ add_custom_command(
         COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/resources $<TARGET_FILE_DIR:${PROJECT_NAME}>/resources
         DEPENDS ${PROJECT_RESOURCES})
 
-set(CMAKE_CXX_STANDARD 17)
 
 #add_executable(ClothSim main.cpp)

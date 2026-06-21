@@ -195,6 +195,24 @@ glm::vec2 Fluid::CalculateViscosityForce(int particleIndex) const
     return viscosityForce * viscosityStrength;
 }
 
+glm::vec2 Fluid::CalculateInteractionForce(const glm::vec2 inputPos, const float radius, const float strength, const int particleIndex) const
+{
+    glm::vec2 interactionForce = glm::vec2(0);
+    const glm::vec2 offset = inputPos - currentPositions[particleIndex];
+    const float sqrDst = glm::dot(offset, offset);
+
+    if (sqrDst < radius * radius)
+    {
+        const float dst = glm::sqrt(sqrDst);
+        const glm::vec2 dirToInputPoint = dst <= glm::epsilon<float>() ? glm::vec2(0) : offset / dst;
+        // influence is 1 when particle is at input point, 0 when at the edge of input radius
+        const float influence = 1 - dst / radius;
+        // velocity is subtracted to slow the particle down
+        interactionForce += (dirToInputPoint * strength - velocities[particleIndex]) * influence;
+    }
+    return interactionForce;
+}
+
 unsigned int Fluid::GetKeyFromHash(unsigned int hash) const
 {
     return hash % static_cast<unsigned int>(particleCount);
@@ -228,12 +246,19 @@ void Fluid::UpdateSpatialLookup()
     }
 }
 
-void Fluid::Update(const float dt, const glm::vec2 gravity)
+void Fluid::Update(const float dt, const glm::vec2 gravity, const optional<glm::vec3> interaction)
 {
     for (int i = 0; i < particleCount; i++)
     {
         forces[i] = gravity;
         predictedPositions[i] = currentPositions[i] + currentPositions[i] - previousPositions[i];
+    }
+    if (interaction.has_value())
+    {
+        for (int i = 0; i < particleCount; i++)
+        {
+            forces[i] += CalculateInteractionForce(interaction.value(), 2, 200 * interaction.value().z, i);
+        }
     }
 
     auto spatialLookupStart = std::chrono::high_resolution_clock::now();
@@ -316,6 +341,5 @@ void Fluid::Update(const float dt, const glm::vec2 gravity)
     double pressureMs = std::chrono::duration<double, std::milli>(pressureEnd - pressureStart).count();
     double viscosityMs = std::chrono::duration<double, std::milli>(viscosityEnd - viscosityStart).count();
     double collisionsMs = std::chrono::duration<double, std::milli>(collisionsEnd - collisionsStart).count();
-    std::cout << "Spatial lookup: " << spatialLookupMs << " ms, Density: " << densityMs << " ms, Pressure: " << pressureMs << " ms, Viscosity: " << viscosityMs << " ms, Integration and collisions: " << collisionsMs << " ms\n";
-
+    // std::cout << "Spatial lookup: " << spatialLookupMs << " ms, Density: " << densityMs << " ms, Pressure: " << pressureMs << " ms, Viscosity: " << viscosityMs << " ms, Integration and collisions: " << collisionsMs << " ms\n";
 }

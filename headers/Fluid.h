@@ -1,6 +1,7 @@
 #pragma once
 
 #include <vector>
+#include <optional>
 
 #include "Object.h"
 
@@ -39,18 +40,19 @@ private:
     glm::vec2 corner1, corner2;
 public:
     Fluid(int particlesX, int particlesY, float smoothingRadius, float targetDensity, float pressureMultiplier, float viscosityStrength, glm::vec2 startingPosition, float particleSize, float particleSpacing, glm::vec2 corner1, glm::vec2 corner2, Object* object);
-    float CalculateDensity(glm::vec2 samplePoint) const;
-    float ConvertDensityToPressure(float density) const;
-    float CalculateSharedPressure(float densityA, float densityB) const;
-    glm::vec2 CalculatePressureForce(int particleIndex) const;
-    glm::vec2 CalculateViscosityForce(int particleIndex) const;
+    [[nodiscard]] float CalculateDensity(glm::vec2 samplePoint) const;
+    [[nodiscard]] float ConvertDensityToPressure(float density) const;
+    [[nodiscard]] float CalculateSharedPressure(float densityA, float densityB) const;
+    [[nodiscard]] glm::vec2 CalculatePressureForce(int particleIndex) const;
+    [[nodiscard]] glm::vec2 CalculateViscosityForce(int particleIndex) const;
+    [[nodiscard]] glm::vec2 CalculateInteractionForce(glm::vec2 inputPos, float radius, float strength, int particleIndex) const;
     static glm::vec<2, int> PositionToCellCoord(glm::vec2 point, float radius);
     static unsigned int Fluid::HashCell(int cellX, int cellY);
-    unsigned int GetKeyFromHash(unsigned int hash) const;
+    [[nodiscard]] unsigned int GetKeyFromHash(unsigned int hash) const;
     void UpdateSpatialLookup();
     template<typename F>
     void ForeachPointWithinRadius(glm::vec2 samplePoint, F&& f) const;
-    void Update(float dt, glm::vec2 gravity);
+    void Update(float dt, glm::vec2 gravity, optional<glm::vec3> interaction);
 };
 
 
