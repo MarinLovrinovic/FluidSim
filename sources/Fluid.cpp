@@ -91,14 +91,8 @@ object(object),
 corner1(corner1),
 corner2(corner2)
 {
-    previousPositions.resize(particleCount);
-    currentPositions.resize(particleCount);
-    predictedPositions.resize(particleCount);
-    particleIndices.resize(particleCount);
-    velocities.resize(particleCount);
-    forces.resize(particleCount);
-    densities.resize(particleCount);
     spatialLookup.resize(particleCount);
+    particleIndices.resize(particleCount);
     startIndices.resize(particleCount);
     object->transforms.resize(particleCount);
 
@@ -108,8 +102,9 @@ corner2(corner2)
         {
             int index = y * particlesX + x;
             glm::vec2 particlePosition = startingPosition + glm::vec2(particleSpacing * x, particleSpacing * y);
-            previousPositions[index] = particlePosition;
-            currentPositions[index] = particlePosition;
+            spatialLookup[index].previousPosition = particlePosition;
+            spatialLookup[index].currentPosition = particlePosition;
+            spatialLookup[index].transform = &object->transforms[index];
         }
     }
 
@@ -124,25 +119,25 @@ corner2(corner2)
         // const glm::vec2 offset = glm::vec2(dist(gen), dist(gen));
         // currentPositions[i] += offset;
         // previousPositions[i] += offset;
-        object->transforms[i].SetPosition(glm::vec3(currentPositions[i], 0));
+        object->transforms[i].SetPosition(glm::vec3(spatialLookup[i].currentPosition, 0));
         object->transforms[i].SetScale(glm::vec3(particleSize));
         particleIndices[i] = i;
     }
 }
 
-float Fluid::CalculateDensity(const glm::vec2 samplePoint) const
+void Fluid::CalculateDensity(SpatialLookupEntry& particle) const
 {
     float density = 0;
     constexpr float mass = 1;
 
-    ForeachPointWithinRadius(samplePoint, [&](const int pointIndex)
+    ForeachPointWithinRadius(particle.predictedPosition, [&](const SpatialLookupEntry& otherParticle)
     {
-        const glm::vec2 position = predictedPositions[pointIndex];
-        const float distance = glm::length(position - samplePoint);
+        const glm::vec2 position = otherParticle.predictedPosition;
+        const float distance = glm::length(position - particle.predictedPosition);
         const float influence = SmoothingKernel(smoothingRadius, distance);
         density += mass * influence;
     });
-    return density;
+    particle.density = density;
 }
 
 float Fluid::ConvertDensityToPressure(const float density) const
@@ -159,51 +154,51 @@ float Fluid::CalculateSharedPressure(float densityA, float densityB) const
     return (pressureA + pressureB) / 2;
 }
 
-glm::vec2 Fluid::CalculatePressureForce(const int particleIndex) const
+void Fluid::CalculatePressureForce(SpatialLookupEntry& particle) const
 {
     glm::vec2 pressureForce(0);
     constexpr float mass = 1;
-    const float particleDensity = densities[particleIndex];
+    const float particleDensity = particle.density;
 
-    const glm::vec2 particlePosition = predictedPositions[particleIndex];
-    ForeachPointWithinRadius(particlePosition, [&](const int otherParticleIndex)
+    const glm::vec2 particlePosition = particle.predictedPosition;
+    ForeachPointWithinRadius(particlePosition, [&](const SpatialLookupEntry& otherParticle)
     {
-        if (otherParticleIndex != particleIndex)
+        if (&otherParticle != &particle)
         {
-            const glm::vec2 offset = predictedPositions[otherParticleIndex] - particlePosition;
+            const glm::vec2 offset = otherParticle.predictedPosition - particlePosition;
             const float distance = glm::length(offset);
             // pick a random direction in case two particles share the same position
             const glm::vec2 direction = distance == 0 ? glm::circularRand(1.0f) : offset / distance;
             const float slope = SmoothingKernelDerivative(smoothingRadius, distance);
-            const float otherParticleDensity = densities[otherParticleIndex];
+            const float otherParticleDensity = otherParticle.density;
             const float sharedPressure = CalculateSharedPressure(particleDensity, otherParticleDensity);
             pressureForce += sharedPressure * direction * slope * mass / otherParticleDensity;
         }
     });
-    return pressureForce;
+    particle.force += pressureForce;
 }
 
-glm::vec2 Fluid::CalculateViscosityForce(int particleIndex) const
+void Fluid::CalculateViscosityForce(SpatialLookupEntry& particle) const
 {
     glm::vec2 viscosityForce(0);
-    const glm::vec2 particlePosition = predictedPositions[particleIndex];
+    const glm::vec2 particlePosition = particle.predictedPosition;
 
-    ForeachPointWithinRadius(particlePosition, [&](const int otherParticleIndex)
+    ForeachPointWithinRadius(particlePosition, [&](const SpatialLookupEntry& otherParticle)
     {
-        if (otherParticleIndex != particleIndex)
+        if (&otherParticle != &particle)
         {
-            const float distance = glm::length(particlePosition - predictedPositions[otherParticleIndex]);
+            const float distance = glm::length(particlePosition - otherParticle.predictedPosition);
             const float influence = SmoothingKernelFlat(smoothingRadius, distance);
-            viscosityForce += (velocities[otherParticleIndex] - velocities[particleIndex]) * influence;
+            viscosityForce += (otherParticle.velocity - particle.velocity) * influence;
         }
     });
-    return viscosityForce * viscosityStrength;
+    particle.force += viscosityForce * viscosityStrength;
 }
 
-glm::vec2 Fluid::CalculateInteractionForce(const glm::vec2 inputPos, const float radius, const float strength, const int particleIndex) const
+void Fluid::CalculateInteractionForce(const glm::vec2 inputPos, const float radius, const float strength, SpatialLookupEntry& particle) const
 {
     glm::vec2 interactionForce = glm::vec2(0);
-    const glm::vec2 offset = inputPos - currentPositions[particleIndex];
+    const glm::vec2 offset = inputPos - particle.currentPosition;
     const float sqrDst = glm::dot(offset, offset);
 
     if (sqrDst < radius * radius)
@@ -213,9 +208,9 @@ glm::vec2 Fluid::CalculateInteractionForce(const glm::vec2 inputPos, const float
         // influence is 1 when particle is at input point, 0 when at the edge of input radius
         const float influence = 1 - dst / radius;
         // velocity is subtracted to slow the particle down
-        interactionForce += (dirToInputPoint * strength - velocities[particleIndex]) * influence;
+        interactionForce += (dirToInputPoint * strength - particle.velocity) * influence;
     }
-    return interactionForce;
+    particle.force += interactionForce;
 }
 
 unsigned int Fluid::GetKeyFromHash(unsigned int hash) const
@@ -226,21 +221,21 @@ unsigned int Fluid::GetKeyFromHash(unsigned int hash) const
 void Fluid::UpdateSpatialLookup()
 {
     // create unordered spatial lookup
-    for_each(executionPolicy, particleIndices.begin(), particleIndices.end(), [&](auto i)
+    for_each(executionPolicy, spatialLookup.begin(), spatialLookup.end(), [&](SpatialLookupEntry& particle)
     {
-        const glm::vec<2, int> cell = PositionToCellCoord(predictedPositions[i], smoothingRadius);
+        const glm::vec<2, int> cell = PositionToCellCoord(particle.predictedPosition, smoothingRadius);
         const unsigned int cellKey = GetKeyFromHash(HashCell(cell.x, cell.y));
-        spatialLookup[i] = SpatialLookupEntry {
-            i,
-            cellKey
-        };
-        startIndices[i] = std::numeric_limits<int>::max();
+        particle.cellKey = cellKey;
     });
 
     // sort by cell key
     std::sort(executionPolicy, spatialLookup.begin(), spatialLookup.end());
 
     // calculate start indices of each unique cell key in the spatial lookup
+    for_each(executionPolicy, particleIndices.begin(), particleIndices.end(), [&](auto i)
+    {
+        startIndices[i] = std::numeric_limits<int>::max();
+    });
     for_each(executionPolicy, particleIndices.begin(), particleIndices.end(), [&](auto i)
     {
         const unsigned int key = spatialLookup[i].cellKey;
@@ -253,17 +248,17 @@ void Fluid::UpdateSpatialLookup()
 
 void Fluid::Update(const float dt, const glm::vec2 gravity, const optional<glm::vec3> interaction)
 {
-    for_each(executionPolicy, particleIndices.begin(), particleIndices.end(), [&](auto i)
+    for_each(executionPolicy, spatialLookup.begin(), spatialLookup.end(), [&](SpatialLookupEntry& particle)
     {
-        forces[i] = gravity;
-        predictedPositions[i] = currentPositions[i] + currentPositions[i] - previousPositions[i];
+        particle.force = gravity;
+        particle.predictedPosition = particle.currentPosition + particle.currentPosition - particle.predictedPosition;
     });
 
     if (interaction.has_value())
     {
-        for_each(executionPolicy, particleIndices.begin(), particleIndices.end(), [&](auto i)
+        for_each(executionPolicy, spatialLookup.begin(), spatialLookup.end(), [&](SpatialLookupEntry& particle)
         {
-            forces[i] += CalculateInteractionForce(interaction.value(), 2, 200 * interaction.value().z, i);
+            CalculateInteractionForce(interaction.value(), 2, 200 * interaction.value().z, particle);
         });
     }
 
@@ -272,30 +267,29 @@ void Fluid::Update(const float dt, const glm::vec2 gravity, const optional<glm::
     auto spatialLookupEnd = std::chrono::high_resolution_clock::now();
 
     auto densityStart = std::chrono::high_resolution_clock::now();
-    for_each(executionPolicy, particleIndices.begin(), particleIndices.end(), [&](auto i)
+    for_each(executionPolicy, spatialLookup.begin(), spatialLookup.end(), [&](SpatialLookupEntry& particle)
     {
-        densities[i] = CalculateDensity(predictedPositions[i]);
+        CalculateDensity(particle);
     });
     auto densityEnd = std::chrono::high_resolution_clock::now();
 
     auto forcesStart = std::chrono::high_resolution_clock::now();
-    for_each(executionPolicy, particleIndices.begin(), particleIndices.end(), [&](auto i)
+    for_each(executionPolicy, spatialLookup.begin(), spatialLookup.end(), [&](SpatialLookupEntry& particle)
     {
-        forces[i] += CalculatePressureForce(i);
+        CalculatePressureForce(particle);
     });
-    for_each(executionPolicy, particleIndices.begin(), particleIndices.end(), [&](auto i)
+    for_each(executionPolicy, spatialLookup.begin(), spatialLookup.end(), [&](SpatialLookupEntry& particle)
     {
-        forces[i] += CalculateViscosityForce(i);
+        CalculateViscosityForce(particle);
     });
     auto forcesEnd = std::chrono::high_resolution_clock::now();
 
     auto collisionsStart = std::chrono::high_resolution_clock::now();
-    for_each(executionPolicy, particleIndices.begin(), particleIndices.end(), [&](auto i)
+    for_each(executionPolicy, spatialLookup.begin(), spatialLookup.end(), [&](SpatialLookupEntry& particle)
     {
-        glm::vec2 acceleration = forces[i] / densities[i];
-        glm::vec2 currentPosition = currentPositions[i];
-        glm::vec2 nextPosition = 2.0f * currentPosition - previousPositions[i] + acceleration * dt * dt;
-
+        glm::vec2 acceleration = particle.force / particle.density;
+        glm::vec2 currentPosition = particle.currentPosition;
+        glm::vec2 nextPosition = 2.0f * currentPosition - particle.previousPosition + acceleration * dt * dt;
 
         // calculate collisions
         constexpr bool bounce = true;
@@ -332,10 +326,10 @@ void Fluid::Update(const float dt, const glm::vec2 gravity, const optional<glm::
             nextPosition = glm::clamp(nextPosition, minPos, maxPos);
         }
 
-        previousPositions[i] = currentPosition;
-        currentPositions[i] = nextPosition;
-        velocities[i] = (currentPositions[i] - previousPositions[i]) / dt;
-        object->transforms[i].SetPosition(glm::vec3(currentPositions[i], 0));
+        particle.previousPosition = currentPosition;
+        particle.currentPosition = nextPosition;
+        particle.velocity = (particle.currentPosition - particle.predictedPosition) / dt;
+        particle.transform->SetPosition(glm::vec3(particle.currentPosition, 0));
     });
     auto collisionsEnd = std::chrono::high_resolution_clock::now();
 

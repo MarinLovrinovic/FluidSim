@@ -353,7 +353,7 @@ int main(int argc, char* argv[]) {
     TriangleMesh* fluidParticleMesh = ImportMesh(argv0, "ico");
     Object fluidObject(fluidParticleMesh, shader);
     fluidObject.SendToGpu();
-    Fluid fluid(40, 40, 0.35, 22.2, 47.44, 0.2 , glm::vec2(0), 0.05f, 0.07, glm::vec2(-6, -6), glm::vec2(6, 6), &fluidObject);
+    Fluid fluid(60, 60, 0.35, 22.2, 47.44, 0.2 , glm::vec2(0), 0.05f, 0.07, glm::vec2(-6, -6), glm::vec2(6, 6), &fluidObject);
     renderer->RegisterRenderable(&fluidObject);
 
     Object interactionIndicator(fluidParticleMesh, shader);
