@@ -42,6 +42,7 @@
 #include <vector>
 
 #include "Fluid.h"
+#include "Fluid2D.h"
 #include "Utils.h"
 
 using namespace std;
@@ -353,7 +354,7 @@ int main(int argc, char* argv[]) {
     TriangleMesh* fluidParticleMesh = ImportMesh(argv0, "ico");
     Object fluidObject(fluidParticleMesh, shader);
     fluidObject.SendToGpu();
-    Fluid fluid(40, 40, 0.35, 32.2, 47.44, 1, 0.2 , glm::vec2(0), 0.05f, 0.07, glm::vec2(-6, -6), glm::vec2(6, 6), &fluidObject);
+    Fluid2D fluid(glm::ivec2(60, 40), 0.35, 32.2, 37.44, 1, 0.2 , glm::vec2(0), 0.05f, 0.07, glm::vec2(-6, -6), glm::vec2(6, 6), &fluidObject);
     renderer->RegisterRenderable(&fluidObject);
 
     Object interactionIndicator(fluidParticleMesh, shader);

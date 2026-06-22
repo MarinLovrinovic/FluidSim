@@ -1,4 +1,4 @@
-#include "Fluid.h"
+#include "Fluid2D.h"
 
 #include <chrono>
 #include <iostream>
@@ -15,7 +15,7 @@
 
 constexpr auto executionPolicy = std::execution::par;
 
-float Fluid::SmoothingKernelFlat(const float radius, const float distance) const
+float Fluid2D::SmoothingKernelFlat(const float radius, const float distance) const
 {
     if (distance >= radius) return 0;
 
@@ -23,7 +23,7 @@ float Fluid::SmoothingKernelFlat(const float radius, const float distance) const
     return value * value * value * kernelScalingFactorFlat;
 }
 
-float Fluid::SmoothingKernelSpikyPow2(const float radius, const float distance) const
+float Fluid2D::SmoothingKernelSpikyPow2(const float radius, const float distance) const
 {
     if (distance >= radius) return 0;
 
@@ -31,7 +31,7 @@ float Fluid::SmoothingKernelSpikyPow2(const float radius, const float distance) 
     return value * value * kernelScalingFactorSpikyPow2;
 }
 
-float Fluid::SmoothingKernelSpikyPow2Derivative(const float radius, const float distance) const
+float Fluid2D::SmoothingKernelSpikyPow2Derivative(const float radius, const float distance) const
 {
     if (distance >= radius) return 0;
 
@@ -39,7 +39,7 @@ float Fluid::SmoothingKernelSpikyPow2Derivative(const float radius, const float 
     return -value * kernelScalingFactorSpikyPow2Derivative;
 }
 
-float Fluid::SmoothingKernelSpikyPow3(const float radius, const float distance) const
+float Fluid2D::SmoothingKernelSpikyPow3(const float radius, const float distance) const
 {
     if (distance >= radius) return 0;
 
@@ -47,7 +47,7 @@ float Fluid::SmoothingKernelSpikyPow3(const float radius, const float distance) 
     return value * value * value * kernelScalingFactorSpikyPow3;
 }
 
-float Fluid::SmoothingKernelSpikyPow3Derivative(const float radius, const float distance) const
+float Fluid2D::SmoothingKernelSpikyPow3Derivative(const float radius, const float distance) const
 {
     if (distance >= radius) return 0;
 
@@ -55,21 +55,21 @@ float Fluid::SmoothingKernelSpikyPow3Derivative(const float radius, const float 
     return -value * value * kernelScalingFactorSpikyPow3Derivative;
 }
 
-glm::vec<2, int> Fluid::PositionToCellCoord(const glm::vec2 point, const float radius)
+glm::vec<2, int> Fluid2D::PositionToCellCoord(const glm::vec2 point, const float radius)
 {
     const int cellX = static_cast<int>(point.x / radius);
     const int cellY = static_cast<int>(point.y / radius);
     return {cellX, cellY};
 }
 
-unsigned int Fluid::HashCell(const int cellX, const int cellY)
+unsigned int Fluid2D::HashCell(const int cellX, const int cellY)
 {
     const unsigned int a = static_cast<unsigned int>(cellX) * 15823;
     const unsigned int b = static_cast<unsigned int>(cellY) * 9737333;
     return a + b;
 }
 
-Fluid::Fluid(
+Fluid2D::Fluid2D(
     const glm::ivec2 particleGridDimensions,
     const float smoothingRadius,
     const float targetDensity,
@@ -114,17 +114,8 @@ corner2(corner2)
         }
     }
 
-    constexpr float maxOffset = 1;
-
-    // add random offsets
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    uniform_real_distribution<float> dist(-maxOffset, maxOffset);
     for (int i = 0; i < particleCount; i++)
     {
-        // const glm::vec2 offset = glm::vec2(dist(gen), dist(gen));
-        // currentPositions[i] += offset;
-        // previousPositions[i] += offset;
         object->transforms[i].SetPosition(glm::vec3(currentPositions[i], 0));
         object->transforms[i].SetScale(glm::vec3(particleSize));
         particleIndices[i] = i;
@@ -138,7 +129,7 @@ corner2(corner2)
     kernelScalingFactorSpikyPow2Derivative = 12 / (pi * glm::pow(smoothingRadius, 4));
 }
 
-glm::vec2 Fluid::CalculateDensities(const glm::vec2 samplePoint) const
+glm::vec2 Fluid2D::CalculateDensities(const glm::vec2 samplePoint) const
 {
     float density = 0;
     float nearDensity = 0;
@@ -153,18 +144,18 @@ glm::vec2 Fluid::CalculateDensities(const glm::vec2 samplePoint) const
     return {density, nearDensity};
 }
 
-float Fluid::DensityToPressure(const float density) const
+float Fluid2D::DensityToPressure(const float density) const
 {
     const float densityError = density - targetDensity;
     return densityError * pressureMultiplier;
 }
 
-float Fluid::NearDensityToNearPressure(const float nearDensity) const
+float Fluid2D::NearDensityToNearPressure(const float nearDensity) const
 {
     return nearDensity * nearPressureMultiplier;
 }
 
-glm::vec2 Fluid::CalculatePressureForce(const int particleIndex) const
+glm::vec2 Fluid2D::CalculatePressureForce(const int particleIndex) const
 {
     glm::vec2 pressureForce(0);
     const float density = densities[particleIndex].x;
@@ -197,7 +188,7 @@ glm::vec2 Fluid::CalculatePressureForce(const int particleIndex) const
     return pressureForce;
 }
 
-glm::vec2 Fluid::CalculateViscosityForce(int particleIndex) const
+glm::vec2 Fluid2D::CalculateViscosityForce(int particleIndex) const
 {
     glm::vec2 viscosityForce(0);
     const glm::vec2 particlePosition = predictedPositions[particleIndex];
@@ -214,7 +205,7 @@ glm::vec2 Fluid::CalculateViscosityForce(int particleIndex) const
     return viscosityForce * viscosityStrength;
 }
 
-glm::vec2 Fluid::CalculateInteractionForce(const glm::vec2 inputPos, const float radius, const float strength, const int particleIndex) const
+glm::vec2 Fluid2D::CalculateInteractionForce(const glm::vec2 inputPos, const float radius, const float strength, const int particleIndex) const
 {
     glm::vec2 interactionForce = glm::vec2(0);
     const glm::vec2 offset = inputPos - currentPositions[particleIndex];
@@ -232,12 +223,12 @@ glm::vec2 Fluid::CalculateInteractionForce(const glm::vec2 inputPos, const float
     return interactionForce;
 }
 
-unsigned int Fluid::GetKeyFromHash(unsigned int hash) const
+unsigned int Fluid2D::GetKeyFromHash(unsigned int hash) const
 {
     return hash % static_cast<unsigned int>(particleCount);
 }
 
-void Fluid::UpdateSpatialLookup()
+void Fluid2D::UpdateSpatialLookup()
 {
     // create unordered spatial lookup
     for_each(executionPolicy, particleIndices.begin(), particleIndices.end(), [&](auto i)
@@ -265,7 +256,7 @@ void Fluid::UpdateSpatialLookup()
     });
 }
 
-void Fluid::Update(const float dt, const glm::vec2 gravity, const optional<glm::vec3> interaction)
+void Fluid2D::Update(const float dt, const glm::vec2 gravity, const optional<glm::vec3> interaction)
 {
     for_each(executionPolicy, particleIndices.begin(), particleIndices.end(), [&](auto i)
     {

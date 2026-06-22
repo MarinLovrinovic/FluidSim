@@ -11,7 +11,7 @@
 
 using namespace std;
 
-class Fluid
+class Fluid2D
 {
 private:
     struct SpatialLookupEntry
@@ -55,7 +55,7 @@ private:
     float kernelScalingFactorSpikyPow3Derivative;
     float pi = glm::pi<float>();
 public:
-    Fluid(glm::ivec2 particleGridDimensions, float smoothingRadius, float targetDensity, float pressureMultiplier, float nearPressureMultiplier, float viscosityStrength, glm::vec2 startingPosition, float particleSize, float particleSpacing, glm::vec2 corner1, glm::vec2 corner2, Object* object);
+    Fluid2D(glm::ivec2 particleGridDimensions, float smoothingRadius, float targetDensity, float pressureMultiplier, float nearPressureMultiplier, float viscosityStrength, glm::vec2 startingPosition, float particleSize, float particleSpacing, glm::vec2 corner1, glm::vec2 corner2, Object* object);
     [[nodiscard]] glm::vec2 CalculateDensities(glm::vec2 samplePoint) const;
     [[nodiscard]] float DensityToPressure(float density) const;
     [[nodiscard]] float NearDensityToNearPressure(float nearDensity) const;
@@ -63,7 +63,7 @@ public:
     [[nodiscard]] glm::vec2 CalculateViscosityForce(int particleIndex) const;
     [[nodiscard]] glm::vec2 CalculateInteractionForce(glm::vec2 inputPos, float radius, float strength, int particleIndex) const;
     static glm::vec<2, int> PositionToCellCoord(glm::vec2 point, float radius);
-    static unsigned int Fluid::HashCell(int cellX, int cellY);
+    static unsigned int HashCell(int cellX, int cellY);
     [[nodiscard]] unsigned int GetKeyFromHash(unsigned int hash) const;
     void UpdateSpatialLookup();
     template<typename F>
@@ -73,7 +73,7 @@ public:
 
 
 template <typename F>
-void Fluid::ForeachPointWithinRadius(const glm::vec2 samplePoint, F&& f) const
+void Fluid2D::ForeachPointWithinRadius(const glm::vec2 samplePoint, F&& f) const
 {
     const glm::vec<2, int> center = PositionToCellCoord(samplePoint, smoothingRadius);
     const float sqrRadius = smoothingRadius * smoothingRadius;
