@@ -87,5 +87,4 @@ void Fluid::ForeachPointWithinRadius(const glm::vec2 samplePoint, F&& f) const
             }
         }
     }
-
 }
