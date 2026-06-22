@@ -27,6 +27,7 @@ private:
     float smoothingRadius;
     float targetDensity;
     float pressureMultiplier;
+    float nearPressureMultiplier;
     float viscosityStrength;
     vector<glm::vec2> previousPositions;
     vector<glm::vec2> currentPositions;
@@ -34,15 +35,16 @@ private:
     vector<int> particleIndices;
     vector<glm::vec2> velocities;
     vector<glm::vec2> forces;
-    vector<float> densities;
+    vector<glm::vec2> densities;
     vector<SpatialLookupEntry> spatialLookup;
     vector<int> startIndices;
     Object* object;
     glm::vec2 corner1, corner2;
 public:
-    Fluid(int particlesX, int particlesY, float smoothingRadius, float targetDensity, float pressureMultiplier, float viscosityStrength, glm::vec2 startingPosition, float particleSize, float particleSpacing, glm::vec2 corner1, glm::vec2 corner2, Object* object);
-    [[nodiscard]] float CalculateDensity(glm::vec2 samplePoint) const;
-    [[nodiscard]] float ConvertDensityToPressure(float density) const;
+    Fluid(int particlesX, int particlesY, float smoothingRadius, float targetDensity, float pressureMultiplier, float nearPressureMultiplier, float viscosityStrength, glm::vec2 startingPosition, float particleSize, float particleSpacing, glm::vec2 corner1, glm::vec2 corner2, Object* object);
+    [[nodiscard]] glm::vec2 CalculateDensities(glm::vec2 samplePoint) const;
+    [[nodiscard]] float DensityToPressure(float density) const;
+    [[nodiscard]] float NearDensityToNearPressure(float nearDensity) const;
     [[nodiscard]] float CalculateSharedPressure(float densityA, float densityB) const;
     [[nodiscard]] glm::vec2 CalculatePressureForce(int particleIndex) const;
     [[nodiscard]] glm::vec2 CalculateViscosityForce(int particleIndex) const;

@@ -82,6 +82,7 @@ Fluid::Fluid(
     const float smoothingRadius,
     const float targetDensity,
     const float pressureMultiplier,
+    const float nearPressureMultiplier,
     const float viscosityStrength,
     const glm::vec2 startingPosition,
     const float particleSize,
@@ -93,6 +94,7 @@ particleCount(particlesX * particlesY),
 smoothingRadius(smoothingRadius),
 targetDensity(targetDensity),
 pressureMultiplier(pressureMultiplier),
+nearPressureMultiplier(nearPressureMultiplier),
 viscosityStrength(viscosityStrength),
 object(object),
 corner1(corner1),
@@ -144,40 +146,39 @@ corner2(corner2)
     kernelScalingFactorSpikyPow2Derivative = 12 / (pi * glm::pow(smoothingRadius, 4));
 }
 
-float Fluid::CalculateDensity(const glm::vec2 samplePoint) const
+glm::vec2 Fluid::CalculateDensities(const glm::vec2 samplePoint) const
 {
     float density = 0;
-    constexpr float mass = 1;
+    float nearDensity = 0;
 
     ForeachPointWithinRadius(samplePoint, [&](const int pointIndex)
     {
         const glm::vec2 position = predictedPositions[pointIndex];
         const float distance = glm::length(position - samplePoint);
-        const float influence = SmoothingKernelSpikyPow2(smoothingRadius, distance);
-        density += mass * influence;
+        density += SmoothingKernelSpikyPow2(smoothingRadius, distance);
+        nearDensity += SmoothingKernelSpikyPow3(smoothingRadius, distance);
     });
-    return density;
+    return {density, nearDensity};
 }
 
-float Fluid::ConvertDensityToPressure(const float density) const
+float Fluid::DensityToPressure(const float density) const
 {
     const float densityError = density - targetDensity;
-    const float pressure = densityError * pressureMultiplier;
-    return pressure;
+    return densityError * pressureMultiplier;
 }
 
-float Fluid::CalculateSharedPressure(float densityA, float densityB) const
+float Fluid::NearDensityToNearPressure(const float nearDensity) const
 {
-    float pressureA = ConvertDensityToPressure(densityA);
-    float pressureB = ConvertDensityToPressure(densityB);
-    return (pressureA + pressureB) / 2;
+    return nearDensity * nearPressureMultiplier;
 }
 
 glm::vec2 Fluid::CalculatePressureForce(const int particleIndex) const
 {
     glm::vec2 pressureForce(0);
-    constexpr float mass = 1;
-    const float particleDensity = densities[particleIndex];
+    const float density = densities[particleIndex].x;
+    const float nearDensity = densities[particleIndex].y;
+    const float pressure = DensityToPressure(density);
+    const float nearPressure = NearDensityToNearPressure(nearDensity);
 
     const glm::vec2 particlePosition = predictedPositions[particleIndex];
     ForeachPointWithinRadius(particlePosition, [&](const int otherParticleIndex)
@@ -188,10 +189,17 @@ glm::vec2 Fluid::CalculatePressureForce(const int particleIndex) const
             const float distance = glm::length(offset);
             // pick a random direction in case two particles share the same position
             const glm::vec2 direction = distance == 0 ? glm::circularRand(1.0f) : offset / distance;
-            const float slope = SmoothingKernelSpikyPow2Derivative(smoothingRadius, distance);
-            const float otherParticleDensity = densities[otherParticleIndex];
-            const float sharedPressure = CalculateSharedPressure(particleDensity, otherParticleDensity);
-            pressureForce += sharedPressure * direction * slope * mass / otherParticleDensity;
+            const float otherDensity = densities[otherParticleIndex].x;
+            const float otherNearDensity = densities[otherParticleIndex].y;
+            const float otherPressure = DensityToPressure(otherDensity);
+            const float otherNearPressure = NearDensityToNearPressure(otherNearDensity);
+
+            const float sharedPressure = (pressure + otherPressure) * 0.5f;
+            const float sharedNearPressure = (nearPressure + otherNearPressure) * 0.5f;
+            pressureForce += sharedPressure * direction
+                * SmoothingKernelSpikyPow2Derivative(smoothingRadius, distance) / otherDensity;
+            pressureForce += sharedNearPressure * direction
+                * SmoothingKernelSpikyPow3Derivative(smoothingRadius, distance) / otherNearDensity;
         }
     });
     return pressureForce;
@@ -288,7 +296,7 @@ void Fluid::Update(const float dt, const glm::vec2 gravity, const optional<glm::
     auto densityStart = std::chrono::high_resolution_clock::now();
     for_each(executionPolicy, particleIndices.begin(), particleIndices.end(), [&](auto i)
     {
-        densities[i] = CalculateDensity(predictedPositions[i]);
+        densities[i] = CalculateDensities(predictedPositions[i]);
     });
     auto densityEnd = std::chrono::high_resolution_clock::now();
 
