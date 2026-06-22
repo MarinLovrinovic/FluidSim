@@ -16,38 +16,50 @@
 float pi = glm::pi<float>();
 constexpr auto executionPolicy = std::execution::par;
 
+float kernelScalingFactorFlat;
+float kernelScalingFactorSpikyPow2;
+float kernelScalingFactorSpikyPow2Derivative;
+float kernelScalingFactorSpikyPow3;
+float kernelScalingFactorSpikyPow3Derivative;
+
 float SmoothingKernelFlat(const float radius, const float distance)
 {
     if (distance >= radius) return 0;
 
-    const float volume = pi * glm::pow(radius, 8) / 4;
-    const float value = max(0.0f, radius * radius - distance * distance);
-    return value * value * value / volume;
+    const float value = radius * radius - distance * distance;
+    return value * value * value * kernelScalingFactorFlat;
 }
 
-float SmoothingKernelDerivativeFlat(const float radius, const float distance)
+float SmoothingKernelSpikyPow2(const float radius, const float distance)
 {
     if (distance >= radius) return 0;
 
-    const float f = radius * radius - distance * distance;
-    const float scale = -24 / (pi * glm::pow(radius, 8));
-    return scale * distance * f * f;
+    const float value = radius - distance;
+    return value * value * kernelScalingFactorSpikyPow2;
 }
 
-float SmoothingKernel(const float radius, const float distance)
+float SmoothingKernelSpikyPow2Derivative(const float radius, const float distance)
 {
     if (distance >= radius) return 0;
 
-    const float volume = (pi * glm::pow(radius, 4)) / 6;
-    return (radius - distance) * (radius - distance) / volume;
+    const float value = radius - distance;
+    return -value * kernelScalingFactorSpikyPow2Derivative;
 }
 
-float SmoothingKernelDerivative(const float radius, const float distance)
+float SmoothingKernelSpikyPow3(const float radius, const float distance)
 {
     if (distance >= radius) return 0;
 
-    const float scale = 12 / (glm::pow(radius, 4) * pi);
-    return (distance - radius) * scale;
+    const float value = radius - distance;
+    return value * value * value * kernelScalingFactorSpikyPow3;
+}
+
+float SmoothingKernelSpikyPow3Derivative(const float radius, const float distance)
+{
+    if (distance >= radius) return 0;
+
+    const float value = radius - distance;
+    return -value * value * kernelScalingFactorSpikyPow3Derivative;
 }
 
 glm::vec<2, int> Fluid::PositionToCellCoord(const glm::vec2 point, const float radius)
@@ -62,11 +74,6 @@ unsigned int Fluid::HashCell(const int cellX, const int cellY)
     const unsigned int a = static_cast<unsigned int>(cellX) * 15823;
     const unsigned int b = static_cast<unsigned int>(cellY) * 9737333;
     return a + b;
-}
-
-void UpdateTransforms()
-{
-
 }
 
 Fluid::Fluid(
@@ -128,6 +135,13 @@ corner2(corner2)
         object->transforms[i].SetScale(glm::vec3(particleSize));
         particleIndices[i] = i;
     }
+
+    // pre-calculate kernel scaling factors
+    kernelScalingFactorFlat = 4 / (pi * glm::pow(smoothingRadius, 8));
+    kernelScalingFactorSpikyPow3 = 10 / (pi * glm::pow(smoothingRadius, 5));
+    kernelScalingFactorSpikyPow2 = 6 / (pi * glm::pow(smoothingRadius, 4));
+    kernelScalingFactorSpikyPow3Derivative = 30 / (pi * glm::pow(smoothingRadius, 5));
+    kernelScalingFactorSpikyPow2Derivative = 12 / (pi * glm::pow(smoothingRadius, 4));
 }
 
 float Fluid::CalculateDensity(const glm::vec2 samplePoint) const
@@ -139,7 +153,7 @@ float Fluid::CalculateDensity(const glm::vec2 samplePoint) const
     {
         const glm::vec2 position = predictedPositions[pointIndex];
         const float distance = glm::length(position - samplePoint);
-        const float influence = SmoothingKernel(smoothingRadius, distance);
+        const float influence = SmoothingKernelSpikyPow2(smoothingRadius, distance);
         density += mass * influence;
     });
     return density;
@@ -174,7 +188,7 @@ glm::vec2 Fluid::CalculatePressureForce(const int particleIndex) const
             const float distance = glm::length(offset);
             // pick a random direction in case two particles share the same position
             const glm::vec2 direction = distance == 0 ? glm::circularRand(1.0f) : offset / distance;
-            const float slope = SmoothingKernelDerivative(smoothingRadius, distance);
+            const float slope = SmoothingKernelSpikyPow2Derivative(smoothingRadius, distance);
             const float otherParticleDensity = densities[otherParticleIndex];
             const float sharedPressure = CalculateSharedPressure(particleDensity, otherParticleDensity);
             pressureForce += sharedPressure * direction * slope * mass / otherParticleDensity;
