@@ -346,15 +346,34 @@ int main(int argc, char* argv[]) {
     shader = LoadShader(argv[0], "scene");
     Light light;
 
+    // NICE 2D SCENARIO
+    // bool threeD = false;
+    // float dt = 0.01f;
+    // vector<Collider*> colliders = { };
+    // light.SetPosition(glm::vec3(10, 10, 10));
+    // camera.SetPosition(glm::vec3(0, 0, 16));
+    // auto gravity = glm::vec2(0, -20);
+    //
+    // TriangleMesh* fluidParticleMesh = ImportMesh(argv0, "ico");
+    // Object fluidObject(fluidParticleMesh, shader);
+    // fluidObject.SendToGpu();
+    // Fluid2D fluid(glm::ivec2(40, 40), 0.35, 32.2, 47.44, 1, 0.2 , glm::vec2(0), 0.05f, 0.07, glm::vec2(-6, -6), glm::vec2(6, 6), &fluidObject);
+    // renderer->RegisterRenderable(&fluidObject);
+
+    // NICE 3D SCENARIO
+    bool threeD = true;
     float dt = 0.01f;
     vector<Collider*> colliders = { };
-    light.SetPosition(glm::vec3(10, 10, 10));
+    light.SetPosition(glm::vec3(10, 10, 5));
     camera.SetPosition(glm::vec3(0, 0, 8));
+    auto gravity = glm::vec3(0, -20, 0);
 
     TriangleMesh* fluidParticleMesh = ImportMesh(argv0, "ico");
     Object fluidObject(fluidParticleMesh, shader);
+    fluidObject.material->backgroundColor = glm::vec3(0, 0, 1);
+    fluidObject.material->curveColor = glm::vec3(0, 0, 1);
     fluidObject.SendToGpu();
-    Fluid fluid(glm::ivec3(13, 13, 13), 0.35, 32.2, 37.44, 1, 0.2 , glm::vec3(0), 0.05f, 0.1, glm::vec3(-2, -2, -2), glm::vec3(2, 2, 2), &fluidObject);
+    Fluid fluid(glm::ivec3(10, 10, 10), 0.35, 32.2, 37.44, 1, 0.2 , glm::vec3(0), 0.05f, 0.1, glm::vec3(-2, -2, -2), glm::vec3(2, 2, 2), &fluidObject);
     renderer->RegisterRenderable(&fluidObject);
 
     Object interactionIndicator(fluidParticleMesh, shader);
@@ -370,13 +389,21 @@ int main(int argc, char* argv[]) {
         }
         optional<glm::vec4> interaction = nullopt;
         if (interactionStrength != 0) {
-            interaction = glm::vec4(camera.GetPosition() - 6.0f * camera.GetLocalZ(), interactionStrength);
-            interactionIndicator.transforms[0].SetPosition(interaction.value());
+
+            glm::vec3 interactionPoint = threeD
+                ? camera.GetPosition() - 6.0f * camera.GetLocalZ() // 3D
+                : RaycastZ0(camera.GetPosition(), camera.GetLocalZ()); // 2D
+
+            interactionIndicator.transforms[0].SetPosition(interactionPoint);
+
+            interaction = threeD
+                ? glm::vec4(interactionPoint, interactionStrength) // 3D
+                : glm::vec4(interactionPoint.x, interactionPoint.y, interactionStrength, 0); // 2D
         }
 
         auto simStart = std::chrono::high_resolution_clock::now();
-        fluid.Update(dt, glm::vec3(0, -20, 0), interaction);
-        fluid.Update(dt, glm::vec3(0, -20, 0), interaction);
+        fluid.Update(dt, gravity, interaction);
+        fluid.Update(dt, gravity, interaction);
         auto simEnd = std::chrono::high_resolution_clock::now();
 
         auto renderStart = std::chrono::high_resolution_clock::now();
