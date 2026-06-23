@@ -130,11 +130,11 @@ corner2(corner2)
     }
 
     // pre-calculate kernel scaling factors
-    kernelScalingFactorFlat = 4 / (pi * glm::pow(smoothingRadius, 8));
-    kernelScalingFactorSpikyPow3 = 10 / (pi * glm::pow(smoothingRadius, 5));
-    kernelScalingFactorSpikyPow2 = 6 / (pi * glm::pow(smoothingRadius, 4));
-    kernelScalingFactorSpikyPow3Derivative = 30 / (pi * glm::pow(smoothingRadius, 5));
-    kernelScalingFactorSpikyPow2Derivative = 12 / (pi * glm::pow(smoothingRadius, 4));
+    kernelScalingFactorFlat = 315 / (64 * pi * glm::pow(smoothingRadius, 9));
+    kernelScalingFactorSpikyPow3 = 15 / (pi * glm::pow(smoothingRadius, 6));
+    kernelScalingFactorSpikyPow2 = 15 / (2 * pi * glm::pow(smoothingRadius, 5));
+    kernelScalingFactorSpikyPow3Derivative = 45 / (pi * glm::pow(smoothingRadius, 6));
+    kernelScalingFactorSpikyPow2Derivative = 15 / (pi * glm::pow(smoothingRadius, 5));
 }
 
 glm::vec2 Fluid::CalculateDensities(const glm::vec3 samplePoint) const
