@@ -373,7 +373,7 @@ int main(int argc, char* argv[]) {
     fluidObject.material->backgroundColor = glm::vec3(0, 0, 1);
     fluidObject.material->curveColor = glm::vec3(0, 0, 1);
     fluidObject.SendToGpu();
-    Fluid fluid(glm::ivec3(10, 10, 10), 0.35, 32.2, 37.44, 1, 0.2 , glm::vec3(0), 0.05f, 0.1, glm::vec3(-2, -2, -2), glm::vec3(2, 2, 2), &fluidObject);
+    Fluid fluid(glm::ivec3(13, 13, 13), 0.35, 102.2, 37.44, 1, 0.2 , glm::vec3(0), 0.05f, 0.1, glm::vec3(-2, -2, -2), glm::vec3(2, 2, 2), &fluidObject);
     renderer->RegisterRenderable(&fluidObject);
 
     Object interactionIndicator(fluidParticleMesh, shader);
