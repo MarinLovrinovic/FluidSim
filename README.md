@@ -1,1 +1,1 @@
-Fluid simulation app for project at FER.
+Fluid simulation app for master's thesis at FER.
