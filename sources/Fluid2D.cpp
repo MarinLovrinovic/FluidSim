@@ -297,7 +297,7 @@ void Fluid2D::Update(const float dt, const glm::vec2 gravity, const optional<glm
     auto collisionsStart = std::chrono::high_resolution_clock::now();
     for_each(executionPolicy, particleIndices.begin(), particleIndices.end(), [&](auto i)
     {
-        glm::vec2 acceleration = forces[i] / densities[i];
+        glm::vec2 acceleration = forces[i] / densities[i].x;
         glm::vec2 currentPosition = currentPositions[i];
         glm::vec2 nextPosition = 2.0f * currentPosition - previousPositions[i] + acceleration * dt * dt;
 

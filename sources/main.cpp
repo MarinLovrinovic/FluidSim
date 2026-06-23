@@ -349,12 +349,12 @@ int main(int argc, char* argv[]) {
     float dt = 0.01f;
     vector<Collider*> colliders = { };
     light.SetPosition(glm::vec3(10, 10, 10));
-    camera.SetPosition(glm::vec3(0, 0, 16));
+    camera.SetPosition(glm::vec3(0, 0, 8));
 
     TriangleMesh* fluidParticleMesh = ImportMesh(argv0, "ico");
     Object fluidObject(fluidParticleMesh, shader);
     fluidObject.SendToGpu();
-    Fluid2D fluid(glm::ivec2(60, 40), 0.35, 32.2, 37.44, 1, 0.2 , glm::vec2(0), 0.05f, 0.07, glm::vec2(-6, -6), glm::vec2(6, 6), &fluidObject);
+    Fluid fluid(glm::ivec3(13, 13, 13), 0.35, 32.2, 37.44, 1, 0.2 , glm::vec3(0), 0.05f, 0.1, glm::vec3(-2, -2, -2), glm::vec3(2, 2, 2), &fluidObject);
     renderer->RegisterRenderable(&fluidObject);
 
     Object interactionIndicator(fluidParticleMesh, shader);
@@ -368,16 +368,15 @@ int main(int argc, char* argv[]) {
         if (moveVector != glm::vec3(0.0f)) {
             camera.Move(dt * camera.LocalToGlobalDir() * glm::vec4(moveVector, 0.0f));
         }
-        optional<glm::vec3> interaction = nullopt;
+        optional<glm::vec4> interaction = nullopt;
         if (interactionStrength != 0) {
-            interaction = RaycastZ0(camera.GetPosition(), camera.GetLocalZ());
+            interaction = glm::vec4(camera.GetPosition() - 6.0f * camera.GetLocalZ(), interactionStrength);
             interactionIndicator.transforms[0].SetPosition(interaction.value());
-            interaction.value().z = interactionStrength;
         }
 
         auto simStart = std::chrono::high_resolution_clock::now();
-        fluid.Update(dt, glm::vec2(0, -20), interaction);
-        fluid.Update(dt, glm::vec2(0, -20), interaction);
+        fluid.Update(dt, glm::vec3(0, -20, 0), interaction);
+        fluid.Update(dt, glm::vec3(0, -20, 0), interaction);
         auto simEnd = std::chrono::high_resolution_clock::now();
 
         auto renderStart = std::chrono::high_resolution_clock::now();

@@ -55,34 +55,39 @@ float Fluid::SmoothingKernelSpikyPow3Derivative(const float radius, const float 
     return -value * value * kernelScalingFactorSpikyPow3Derivative;
 }
 
-glm::vec<2, int> Fluid::PositionToCellCoord(const glm::vec2 point, const float radius)
+glm::ivec3 Fluid::PositionToCellCoord(const glm::vec3 point, const float radius)
 {
     const int cellX = static_cast<int>(point.x / radius);
     const int cellY = static_cast<int>(point.y / radius);
-    return {cellX, cellY};
+    const int cellZ = static_cast<int>(point.z / radius);
+    return {cellX, cellY, cellZ};
 }
 
-unsigned int Fluid::HashCell(const int cellX, const int cellY)
+unsigned int Fluid::HashCell(const glm::ivec3 cell)
 {
-    const unsigned int a = static_cast<unsigned int>(cellX) * 15823;
-    const unsigned int b = static_cast<unsigned int>(cellY) * 9737333;
-    return a + b;
+    constexpr unsigned int blockSize = 50;
+    const glm::uvec3 ucell = cell + glm::ivec3(blockSize / 2);
+
+    const glm::uvec3 localCell = ucell % blockSize;
+    const glm::uvec3 blockID = ucell / blockSize;
+    const unsigned int blockHash = blockID.x * 15823 + blockID.y * 9737333 + blockID.z * 440817757;
+    return localCell.x + blockSize * (localCell.y + blockSize * localCell.z) + blockHash;
 }
 
 Fluid::Fluid(
-    const glm::ivec2 particleGridDimensions,
+    const glm::ivec3 particleGridDimensions,
     const float smoothingRadius,
     const float targetDensity,
     const float pressureMultiplier,
     const float nearPressureMultiplier,
     const float viscosityStrength,
-    const glm::vec2 startingPosition,
+    const glm::vec3 startingPosition,
     const float particleSize,
     const float particleSpacing,
-    const glm::vec2 corner1,
-    const glm::vec2 corner2,
+    const glm::vec3 corner1,
+    const glm::vec3 corner2,
     Object* object) :
-particleCount(particleGridDimensions.x * particleGridDimensions.y),
+particleCount(particleGridDimensions.x * particleGridDimensions.y * particleGridDimensions.z),
 smoothingRadius(smoothingRadius),
 targetDensity(targetDensity),
 pressureMultiplier(pressureMultiplier),
@@ -107,25 +112,19 @@ corner2(corner2)
     {
         for (int y = 0; y < particleGridDimensions.y; ++y)
         {
-            int index = y * particleGridDimensions.x + x;
-            glm::vec2 particlePosition = startingPosition + glm::vec2(particleSpacing * x, particleSpacing * y);
-            previousPositions[index] = particlePosition;
-            currentPositions[index] = particlePosition;
+            for (int z = 0; z < particleGridDimensions.z; ++z)
+            {
+                const int index = z * particleGridDimensions.x * particleGridDimensions.y + y * particleGridDimensions.x + x;
+                const glm::vec3 particlePosition = startingPosition + glm::vec3(particleSpacing * x, particleSpacing * y, particleSpacing * z);
+                previousPositions[index] = particlePosition;
+                currentPositions[index] = particlePosition;
+            }
         }
     }
 
-    constexpr float maxOffset = 1;
-
-    // add random offsets
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    uniform_real_distribution<float> dist(-maxOffset, maxOffset);
     for (int i = 0; i < particleCount; i++)
     {
-        // const glm::vec2 offset = glm::vec2(dist(gen), dist(gen));
-        // currentPositions[i] += offset;
-        // previousPositions[i] += offset;
-        object->transforms[i].SetPosition(glm::vec3(currentPositions[i], 0));
+        object->transforms[i].SetPosition(currentPositions[i]);
         object->transforms[i].SetScale(glm::vec3(particleSize));
         particleIndices[i] = i;
     }
@@ -138,14 +137,14 @@ corner2(corner2)
     kernelScalingFactorSpikyPow2Derivative = 12 / (pi * glm::pow(smoothingRadius, 4));
 }
 
-glm::vec2 Fluid::CalculateDensities(const glm::vec2 samplePoint) const
+glm::vec2 Fluid::CalculateDensities(const glm::vec3 samplePoint) const
 {
     float density = 0;
     float nearDensity = 0;
 
     ForeachPointWithinRadius(samplePoint, [&](const int pointIndex)
     {
-        const glm::vec2 position = predictedPositions[pointIndex];
+        const glm::vec3 position = predictedPositions[pointIndex];
         const float distance = glm::length(position - samplePoint);
         density += SmoothingKernelSpikyPow2(smoothingRadius, distance);
         nearDensity += SmoothingKernelSpikyPow3(smoothingRadius, distance);
@@ -164,23 +163,23 @@ float Fluid::NearDensityToNearPressure(const float nearDensity) const
     return nearDensity * nearPressureMultiplier;
 }
 
-glm::vec2 Fluid::CalculatePressureForce(const int particleIndex) const
+glm::vec3 Fluid::CalculatePressureForce(const int particleIndex) const
 {
-    glm::vec2 pressureForce(0);
+    glm::vec3 pressureForce(0);
     const float density = densities[particleIndex].x;
     const float nearDensity = densities[particleIndex].y;
     const float pressure = DensityToPressure(density);
     const float nearPressure = NearDensityToNearPressure(nearDensity);
 
-    const glm::vec2 particlePosition = predictedPositions[particleIndex];
+    const glm::vec3 particlePosition = predictedPositions[particleIndex];
     ForeachPointWithinRadius(particlePosition, [&](const int otherParticleIndex)
     {
         if (otherParticleIndex != particleIndex)
         {
-            const glm::vec2 offset = predictedPositions[otherParticleIndex] - particlePosition;
+            const glm::vec3 offset = predictedPositions[otherParticleIndex] - particlePosition;
             const float distance = glm::length(offset);
             // pick a random direction in case two particles share the same position
-            const glm::vec2 direction = distance == 0 ? glm::circularRand(1.0f) : offset / distance;
+            const glm::vec3 direction = distance == 0 ? glm::sphericalRand(1.0f) : offset / distance;
             const float otherDensity = densities[otherParticleIndex].x;
             const float otherNearDensity = densities[otherParticleIndex].y;
             const float otherPressure = DensityToPressure(otherDensity);
@@ -197,10 +196,10 @@ glm::vec2 Fluid::CalculatePressureForce(const int particleIndex) const
     return pressureForce;
 }
 
-glm::vec2 Fluid::CalculateViscosityForce(int particleIndex) const
+glm::vec3 Fluid::CalculateViscosityForce(const int particleIndex) const
 {
-    glm::vec2 viscosityForce(0);
-    const glm::vec2 particlePosition = predictedPositions[particleIndex];
+    glm::vec3 viscosityForce(0);
+    const glm::vec3 particlePosition = predictedPositions[particleIndex];
 
     ForeachPointWithinRadius(particlePosition, [&](const int otherParticleIndex)
     {
@@ -214,16 +213,16 @@ glm::vec2 Fluid::CalculateViscosityForce(int particleIndex) const
     return viscosityForce * viscosityStrength;
 }
 
-glm::vec2 Fluid::CalculateInteractionForce(const glm::vec2 inputPos, const float radius, const float strength, const int particleIndex) const
+glm::vec3 Fluid::CalculateInteractionForce(const glm::vec3 inputPos, const float radius, const float strength, const int particleIndex) const
 {
-    glm::vec2 interactionForce = glm::vec2(0);
-    const glm::vec2 offset = inputPos - currentPositions[particleIndex];
+    glm::vec3 interactionForce = glm::vec3(0);
+    const glm::vec3 offset = inputPos - currentPositions[particleIndex];
     const float sqrDst = glm::dot(offset, offset);
 
     if (sqrDst < radius * radius)
     {
         const float dst = glm::sqrt(sqrDst);
-        const glm::vec2 dirToInputPoint = dst <= glm::epsilon<float>() ? glm::vec2(0) : offset / dst;
+        const glm::vec3 dirToInputPoint = dst <= glm::epsilon<float>() ? glm::vec3(0) : offset / dst;
         // influence is 1 when particle is at input point, 0 when at the edge of input radius
         const float influence = 1 - dst / radius;
         // velocity is subtracted to slow the particle down
@@ -242,8 +241,8 @@ void Fluid::UpdateSpatialLookup()
     // create unordered spatial lookup
     for_each(executionPolicy, particleIndices.begin(), particleIndices.end(), [&](auto i)
     {
-        const glm::vec<2, int> cell = PositionToCellCoord(predictedPositions[i], smoothingRadius);
-        const unsigned int cellKey = GetKeyFromHash(HashCell(cell.x, cell.y));
+        const glm::ivec3 cell = PositionToCellCoord(predictedPositions[i], smoothingRadius);
+        const unsigned int cellKey = GetKeyFromHash(HashCell(cell));
         spatialLookup[i] = SpatialLookupEntry {
             i,
             cellKey
@@ -265,7 +264,7 @@ void Fluid::UpdateSpatialLookup()
     });
 }
 
-void Fluid::Update(const float dt, const glm::vec2 gravity, const optional<glm::vec3> interaction)
+void Fluid::Update(const float dt, const glm::vec3 gravity, const optional<glm::vec4> interaction)
 {
     for_each(executionPolicy, particleIndices.begin(), particleIndices.end(), [&](auto i)
     {
@@ -277,7 +276,7 @@ void Fluid::Update(const float dt, const glm::vec2 gravity, const optional<glm::
     {
         for_each(executionPolicy, particleIndices.begin(), particleIndices.end(), [&](auto i)
         {
-            forces[i] += CalculateInteractionForce(interaction.value(), 2, 200 * interaction.value().z, i);
+            forces[i] += CalculateInteractionForce(interaction.value(), 2, 200 * interaction.value().w, i);
         });
     }
 
@@ -306,38 +305,49 @@ void Fluid::Update(const float dt, const glm::vec2 gravity, const optional<glm::
     auto collisionsStart = std::chrono::high_resolution_clock::now();
     for_each(executionPolicy, particleIndices.begin(), particleIndices.end(), [&](auto i)
     {
-        glm::vec2 acceleration = forces[i] / densities[i];
-        glm::vec2 currentPosition = currentPositions[i];
-        glm::vec2 nextPosition = 2.0f * currentPosition - previousPositions[i] + acceleration * dt * dt;
+        glm::vec3 acceleration = forces[i] / densities[i].x;
+        glm::vec3 currentPosition = currentPositions[i];
+        glm::vec3 nextPosition = 2.0f * currentPosition - previousPositions[i] + acceleration * dt * dt;
 
 
         // calculate collisions
         constexpr bool bounce = true;
         const float bounceFactor = 0.05f;
-        const glm::vec2 minPos = glm::vec2(min(corner1.x, corner2.x), min(corner1.y, corner2.y));
-        const glm::vec2 maxPos = glm::vec2(max(corner1.x, corner2.x), max(corner1.y, corner2.y));
+        const glm::vec3 minPos = glm::vec3(min(corner1.x, corner2.x), min(corner1.y, corner2.y), min(corner1.z, corner2.z));
+        const glm::vec3 maxPos = glm::vec3(max(corner1.x, corner2.x), max(corner1.y, corner2.y), max(corner1.z, corner2.z));
         if (bounce)
         {
             if (nextPosition.x < minPos.x)
             {
-                nextPosition = Mirror(nextPosition, minPos, glm::vec2(1, 0));
-                currentPosition = Mirror(currentPosition, minPos, glm::vec2(1, 0));
+                nextPosition = Mirror(nextPosition, minPos, glm::vec3(1, 0, 0));
+                currentPosition = Mirror(currentPosition, minPos, glm::vec3(1, 0, 0));
                 currentPosition += (nextPosition - currentPosition) * (1 - bounceFactor);
             } else if (maxPos.x < nextPosition.x)
             {
-                nextPosition = Mirror(nextPosition, maxPos, glm::vec2(-1, 0));
-                currentPosition = Mirror(currentPosition, maxPos, glm::vec2(-1, 0));
+                nextPosition = Mirror(nextPosition, maxPos, glm::vec3(-1, 0, 0));
+                currentPosition = Mirror(currentPosition, maxPos, glm::vec3(-1, 0, 0));
                 currentPosition += (nextPosition - currentPosition) * (1 - bounceFactor);
             }
             if (nextPosition.y < minPos.y)
             {
-                nextPosition = Mirror(nextPosition, minPos, glm::vec2(0, 1));
-                currentPosition = Mirror(currentPosition, minPos, glm::vec2(0, 1));
+                nextPosition = Mirror(nextPosition, minPos, glm::vec3(0, 1, 0));
+                currentPosition = Mirror(currentPosition, minPos, glm::vec3(0, 1, 0));
                 currentPosition += (nextPosition - currentPosition) * (1 - bounceFactor);
             } else if (maxPos.y < nextPosition.y)
             {
-                nextPosition = Mirror(nextPosition, maxPos, glm::vec2(0, -1));
-                currentPosition = Mirror(currentPosition, maxPos, glm::vec2(0, -1));
+                nextPosition = Mirror(nextPosition, maxPos, glm::vec3(0, -1, 0));
+                currentPosition = Mirror(currentPosition, maxPos, glm::vec3(0, -1, 0));
+                currentPosition += (nextPosition - currentPosition) * (1 - bounceFactor);
+            }
+            if (nextPosition.z < minPos.z)
+            {
+                nextPosition = Mirror(nextPosition, minPos, glm::vec3(0, 0, 1));
+                currentPosition = Mirror(currentPosition, minPos, glm::vec3(0, 0, 1));
+                currentPosition += (nextPosition - currentPosition) * (1 - bounceFactor);
+            } else if (maxPos.z < nextPosition.z)
+            {
+                nextPosition = Mirror(nextPosition, maxPos, glm::vec3(0, 0, -1));
+                currentPosition = Mirror(currentPosition, maxPos, glm::vec3(0, 0, -1));
                 currentPosition += (nextPosition - currentPosition) * (1 - bounceFactor);
             }
         }
@@ -349,7 +359,7 @@ void Fluid::Update(const float dt, const glm::vec2 gravity, const optional<glm::
         previousPositions[i] = currentPosition;
         currentPositions[i] = nextPosition;
         velocities[i] = (currentPositions[i] - previousPositions[i]) / dt;
-        object->transforms[i].SetPosition(glm::vec3(currentPositions[i], 0));
+        object->transforms[i].SetPosition(currentPositions[i]);
     });
     auto collisionsEnd = std::chrono::high_resolution_clock::now();
 
